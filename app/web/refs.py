@@ -14,12 +14,13 @@ import json
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session as DbSession
 
+from app.auth.guards import is_owner
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.colour_map import ColourMap
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
-from app.models.enums import BinStatus, Brand, ColourKind, PayType, ReminderKind
+from app.models.enums import ACCESS_FLAGS, BinStatus, Brand, ColourKind, PayType, ReminderKind
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
@@ -95,9 +96,12 @@ def build_employees_v1(db: DbSession, brand: Brand) -> list[dict]:
             Employee.active.is_(True), or_(Employee.brand == brand, Employee.brand.is_(None))
         )
     ).all()
+    # The owner sees every hub — grant the full flag set (owner = all-access, Wes 2026-07).
+    # Feature visibility only; owner-only *mutations* stay guarded server-side (is_owner).
     return [
-        {"name": e.name, "role": e.role, "access": list(e.access or []), "active": e.active,
-         "tracked": e.time_tracked, "salaried": e.pay_type == PayType.salaried}
+        {"name": e.name, "role": e.role,
+         "access": sorted(ACCESS_FLAGS) if is_owner(e) else list(e.access or []),
+         "active": e.active, "tracked": e.time_tracked, "salaried": e.pay_type == PayType.salaried}
         for e in emps
     ]
 

@@ -35,11 +35,23 @@
   function toUser(j) { return { name: j.name, role: j.role, access: j.access || [], active: true }; }
   function render() { if (typeof window.render === "function") window.render(); }
 
+  // Owner = all-access: the owner outranks the manager PIN, so unlock the PIN-gated hubs
+  // (e.g. Manager Hub) for the owner only; restored for anyone else. HUBS is the prototype's
+  // tile config — we toggle its `locked` flag without touching the file.
+  function applyOwnerUnlock(user) {
+    if (typeof HUBS === "undefined") return;
+    var isOwner = !!user && (/owner/i.test(user.role || "") || (user.access || []).indexOf("owner") >= 0);
+    HUBS.forEach(function (h) {
+      if (h._origLocked === undefined) h._origLocked = !!h.locked;
+      h.locked = isOwner ? false : h._origLocked;
+    });
+  }
+
   // Restore a real session on load.
   fetch("/auth/me", { credentials: "same-origin" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
-      if (j && typeof S !== "undefined") { S.user = toUser(j); S.screen = "launch"; render(); }
+      if (j && typeof S !== "undefined") { S.user = toUser(j); applyOwnerUnlock(S.user); S.screen = "launch"; render(); }
     })
     .catch(function () {});
 
@@ -57,7 +69,7 @@
           fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
           S.err = "That PIN isn't " + picked + "'s"; S.pin = ""; render(); return;
         }
-        S.user = toUser(j); S.screen = "launch"; S.pin = ""; S.err = ""; render();
+        S.user = toUser(j); applyOwnerUnlock(S.user); S.screen = "launch"; S.pin = ""; S.err = ""; render();
       }).catch(function () { S.err = "Login failed — try again"; S.pin = ""; render(); });
   };
 
@@ -66,6 +78,7 @@
     fetch("/auth/logout", { method: "POST", credentials: "same-origin" })
       .then(function () {
         S = Object.assign(S, { screen: "login", user: null, sel: null, pin: "", err: "" });
+        applyOwnerUnlock(null);   // restore the PIN locks for the next (non-owner) user
         render();
       });
   };

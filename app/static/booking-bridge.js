@@ -42,10 +42,12 @@
     try {
       if (t === "collect") return [val("fname"), val("lname")].filter(Boolean).join(" ");
       if (t === "invoiced") return val("company");
+      if (t === "bins") return val("binCust");
+      if (t === "pallet") return val("palCo");
       if (t === "pm") return (typeof curCompany !== "undefined" ? curCompany : "") || val("cust");
       if (t === "contracts") { var cc = cAll()[curContract]; if (cc) return cc.name; }
     } catch (e) {}
-    return anyVal("company", "cust", "fname");
+    return anyVal("company", "cust", "fname", "binCust", "palCo");
   }
 
   // The prototype already computed and printed the exact CALENDAR HEADLINE in #mBody.
