@@ -53,6 +53,9 @@ class AreaSurcharge(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     aliases: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     hand_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     bin_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Victoria bins carry a separate roofing surcharge (rate sheet `roofingSurcharges`);
+    # only Sooke differs from the regular bin surcharge, but the column keeps both exact.
+    roofing_bin_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     is_base: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 

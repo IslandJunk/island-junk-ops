@@ -18,13 +18,14 @@ from app.auth.guards import is_owner
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.colour_map import ColourMap
+from app.models.contract import Contract
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
 from app.models.enums import ACCESS_FLAGS, BinStatus, Brand, ColourKind, PayType, ReminderKind
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
-from app.models.rates import DisposalFacility, DisposalMaterial, RateCard
+from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, RateCard
 from app.models.reminder import Reminder
 from app.models.truck import Truck
 from app.models.weigh import WeighLog
@@ -116,6 +117,20 @@ def build_rates_v1(db: DbSession, brand: Brand) -> dict | None:
     facs = db.scalars(select(DisposalFacility).where(DisposalFacility.brand == brand)).all()
     fac_name = {f.id: f.name for f in facs}
     mats = db.scalars(select(DisposalMaterial).where(DisposalMaterial.brand == brand)).all()
+    surs = db.scalars(select(AreaSurcharge).where(AreaSurcharge.brand == brand)).all()
+    surcharges = {s.area_name: _f(s.bin_amount) for s in surs if s.bin_amount is not None}
+    roofing_surcharges = {s.area_name: _f(s.roofing_bin_amount) for s in surs if s.roofing_bin_amount is not None}
+    # custom customers persisted from the rate sheet (key rc_*), rebuilt to the sheet's shape
+    customers = []
+    for c in db.scalars(select(Contract).where(Contract.brand == brand, Contract.key.like("rc_%"))):
+        ex = c.properties if isinstance(c.properties, dict) else {}
+        customers.append({
+            "name": c.name, "kind": ex.get("kind", ""), "rates": c.rates or [],
+            "departments": list(c.divisions or []), "reqShots": list(c.shots or []),
+            "poReq": c.po_req, "extra": c.extra, "terms": c.terms or "",
+            "disposal": ex.get("disposal"), "bins": ex.get("bins"),
+            "dumpRates": ex.get("dumpRates"), "jobs": ex.get("jobs"),
+        })
     return {
         "labourRate": _f(rc.labour_rate), "demoRate": _f(rc.demo_rate), "crewExtraRate": _f(rc.crew_extra_rate),
         "recycleCharge": _f(rc.recycle_charge), "diversionSurcharge": _f(rc.diversion_surcharge),
@@ -128,7 +143,8 @@ def build_rates_v1(db: DbSession, brand: Brand) -> dict | None:
         "facilities": [{"name": f.name, "role": f.role.value, "note": f.note or ""} for f in facs],
         "disposal": [{"m": m.m, "fac": fac_name.get(m.facility_id, ""), "cost": _money(m.cost),
                       "price": _money(m.price), "unit": m.unit or "", "note": m.note or ""} for m in mats],
-        "customers": [],
+        "surcharges": surcharges, "roofingSurcharges": roofing_surcharges,
+        "customers": customers,
     }
 
 
@@ -213,6 +229,24 @@ def build_reminders_v1(db: DbSession, brand: Brand) -> list | None:
              "name": r.name, "addr": r.addr, "draft": r.draft} for r in rows]
 
 
+def build_contracts_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_contracts_v1` — user-added contracts (an object keyed by slug). Excludes the
+    rate-sheet custom customers (key `rc_*`, which live in `ij_rates_v1.customers`). None
+    until real ones exist (the prototype keeps its built-in constants)."""
+    rows = [c for c in db.scalars(select(Contract).where(Contract.brand == brand))
+            if not (c.key or "").startswith("rc_")]
+    if not rows:
+        return None
+    return {c.key: {
+        "name": c.name, "short": c.short or "", "pricing": c.pricing.value, "rateKey": c.rate_key,
+        "divisions": list(c.divisions or []), "routeDivs": list(c.route_divs or []),
+        "divAddable": c.div_addable, "extra": c.extra, "bin": c.bin, "poReq": c.po_req,
+        "siteLog": c.site_log, "shots": list(c.shots or []), "terms": c.terms or "",
+        "rates": c.rates, "flat": _f(c.flat), "flatUnit": c.flat_unit,
+        "properties": c.properties, "note": c.note or "",
+    } for c in rows}
+
+
 def build_customers_v1(db: DbSession, brand: Brand) -> list | None:
     """`ij_customers_v1` (residential autofill). None until real customers exist.
     NOTE: coexists with the booking screen's small hardcoded `QB_CUST` demo const —
@@ -274,6 +308,7 @@ _BUILDERS = {
     "ij_maint_v2": build_maint_v2,
     "ij_fixes_v1": build_fixes_v1,
     "ij_reminders_v1": build_reminders_v1,
+    "ij_contracts_v1": build_contracts_v1,
 }
 
 

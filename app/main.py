@@ -59,7 +59,7 @@ if _PROTOTYPES.is_dir():
 
 
 _DISPATCH_REFS = ["ij_fleet_v1", "ij_colourmap_v1"]
-_CUSTOMER_REFS = ["ij_customers_v1", "ij_company_customers_v1", "ij_pm_db_v2"]
+_CUSTOMER_REFS = ["ij_customers_v1", "ij_company_customers_v1", "ij_pm_db_v2", "ij_contracts_v1"]
 _HUB_REFS = ["ij_employees_v1", "ij_fleet_v1", "ij_colourmap_v1", "ij_bins_v1"]
 
 # slug -> {file, refs keys injected from DB, optional bridge}. The Main Hub launcher

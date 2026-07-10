@@ -6,6 +6,7 @@ whole-array sync). Removal is explicit (`active: false` / a status), not by omis
 """
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -18,15 +19,17 @@ from app.auth.security import hash_pin
 from app.customers.qb_import import company_key, residential_key
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
+from app.models.contract import Contract
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
 from app.models.enums import (
-    BinStatus, Brand, CustomerSource, DisposalRole, OWNER_ONLY_GRANTABLE, PayType, ReminderKind,
+    BinStatus, Brand, ContractPricing, CustomerSource, DisposalRole, OWNER_ONLY_GRANTABLE,
+    PayType, ReminderKind,
 )
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
-from app.models.rates import DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
+from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
 from app.models.reminder import Reminder
 from app.models.weigh import WeighLog
 from app.models.yard_processing import YardProcessing
@@ -480,13 +483,89 @@ def _apply_materials(db: DbSession, brand: Brand, mats, actor: Employee) -> dict
     return {"added": added, "updated": updated, "removed": removed, "history": hist}
 
 
+def _slug(s: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (s or "").lower()).strip("_")
+
+
+def _infer_pricing(cust: dict) -> ContractPricing:
+    """Guess a custom customer's pricing mode from its rate units / kind text."""
+    units = " ".join(str(r.get("unit", "")) for r in (cust.get("rates") or [])).lower()
+    kind = (cust.get("kind") or "").lower()
+    if "/hr" in units or "hour" in kind:
+        return ContractPricing.hourly
+    if "month" in kind:
+        return ContractPricing.flatmonthly
+    return ContractPricing.commercial
+
+
+def _apply_surcharges(db: DbSession, brand: Brand, reg, roof) -> dict:
+    """Persist the rate sheet's area surcharges — `surcharges` (regular bin) + `roofingSurcharges`
+    keyed by area name -> area_surcharge rows. Reconcile within a present, non-empty regular map
+    (never touches an `is_base` row)."""
+    if not isinstance(reg, dict) or not reg:
+        return {"skipped": "no surcharges in payload"}
+    roof = roof if isinstance(roof, dict) else {}
+    seen, added, updated = set(), 0, 0
+    for area, amt in reg.items():
+        area = (area or "").strip()
+        if not area:
+            continue
+        seen.add(area)
+        row = db.scalar(select(AreaSurcharge).where(AreaSurcharge.brand == brand, AreaSurcharge.area_name == area))
+        if row is None:
+            row = AreaSurcharge(brand=brand, area_name=area, aliases=[])
+            db.add(row)
+            added += 1
+        else:
+            updated += 1
+        row.bin_amount = _dec(amt)
+        row.roofing_bin_amount = _dec(roof.get(area))
+    removed = 0
+    for row in db.scalars(select(AreaSurcharge).where(AreaSurcharge.brand == brand)).all():
+        if row.area_name not in seen and not row.is_base:
+            db.delete(row)
+            removed += 1
+    return {"added": added, "updated": updated, "removed": removed}
+
+
+def _apply_custom_customers(db: DbSession, brand: Brand, custs, actor: Employee) -> dict:
+    """Persist the rate sheet's custom customers (Saanich/Oak Bay + owner-built) -> contract.
+    Upsert by key `rc_<slug>`; rate-sheet-only extras (kind/disposal/bins/dumpRates/jobs) are
+    preserved in `properties`."""
+    if not isinstance(custs, list) or not custs:
+        return {"skipped": "no custom customers"}
+    added = updated = 0
+    for c in custs:
+        if not isinstance(c, dict) or not (c.get("name") or "").strip():
+            continue
+        name = c["name"].strip()
+        key = "rc_" + _slug(name)
+        row = db.scalar(select(Contract).where(Contract.brand == brand, Contract.key == key))
+        if row is None:
+            row = Contract(brand=brand, key=key, name=name, pricing=_infer_pricing(c))
+            db.add(row)
+            added += 1
+        else:
+            row.name, row.pricing = name, _infer_pricing(c)
+            updated += 1
+        row.short = name.replace("District of ", "")
+        row.divisions = c.get("departments") or []
+        row.shots = c.get("reqShots") or []
+        row.extra = c.get("extra") or None
+        row.po_req = bool(c.get("poReq"))
+        row.terms = c.get("terms") or None
+        row.rates = c.get("rates") or None
+        extras = {k: c.get(k) for k in ("kind", "disposal", "bins", "dumpRates", "jobs") if c.get(k) is not None}
+        row.properties = extras or None
+    return {"added": added, "updated": updated}
+
+
 def apply_rates(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """Persist the rate sheet (`ij_rates_v1`) — the single source of truth for pricing.
-    Owner-only. Writes rate_card scalars + JSONB substructures and upserts disposal
-    facilities + materials. The owner is authoritative for facilities/materials: within a
-    *present, non-empty* list, items no longer in it are removed; an absent/empty list is
-    skipped (never 'delete all'). Custom-customer rate profiles (`data['customers']`) are
-    handled by the contracts write-back, not here."""
+    Owner-only. Writes rate_card scalars + JSONB, disposal facilities + materials, area
+    surcharges (regular + roofing), and custom-customer contracts. Owner-authoritative
+    reconcile-deletes happen only within a *present, non-empty* list; an absent/empty list
+    is skipped (never 'delete all')."""
     if not is_owner(actor):
         return {"error": "forbidden — owner only"}
     if not isinstance(data, dict):
@@ -505,8 +584,51 @@ def apply_rates(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
             setattr(rc, col, data[k])
     facs = _apply_facilities(db, brand, data.get("facilities"))
     mats = _apply_materials(db, brand, data.get("disposal"), actor)
+    surs = _apply_surcharges(db, brand, data.get("surcharges"), data.get("roofingSurcharges"))
+    custs = _apply_custom_customers(db, brand, data.get("customers"), actor)
     db.commit()
-    return {"saved": True, "facilities": facs, "materials": mats}
+    return {"saved": True, "facilities": facs, "materials": mats, "surcharges": surs, "custom_customers": custs}
+
+
+_PRICING = {p.value: p for p in ContractPricing}
+
+
+def apply_contracts(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert user-added contracts (`ij_contracts_v1`, an object keyed by slug) -> contract.
+    A near-1:1 model match. Upsert-only (built-in contracts stay runtime constants)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    n = 0
+    for key, c in data.items():
+        if not isinstance(c, dict) or not (c.get("name") or "").strip():
+            continue
+        row = db.scalar(select(Contract).where(Contract.brand == brand, Contract.key == key))
+        if row is None:
+            row = Contract(brand=brand, key=key, name=c["name"].strip(),
+                           pricing=_PRICING.get(c.get("pricing"), ContractPricing.commercial))
+            db.add(row)
+        else:
+            row.name = c["name"].strip()
+            row.pricing = _PRICING.get(c.get("pricing"), row.pricing)
+        row.short = c.get("short") or None
+        row.rate_key = c.get("rateKey") or None
+        row.divisions = c.get("divisions") or []
+        row.route_divs = c.get("routeDivs") or []
+        row.div_addable = bool(c.get("divAddable"))
+        row.extra = c.get("extra") or None
+        row.bin = bool(c.get("bin"))
+        row.po_req = bool(c.get("poReq"))
+        row.site_log = bool(c.get("siteLog"))
+        row.shots = c.get("shots") or []
+        row.terms = c.get("terms") or None
+        row.rates = c.get("rates") if isinstance(c.get("rates"), list) else None
+        row.flat = _dec(c.get("flat"))
+        row.flat_unit = c.get("flatUnit") or None
+        row.properties = c.get("properties") if isinstance(c.get("properties"), (list, dict)) else None
+        row.note = c.get("note") or None
+        n += 1
+    db.commit()
+    return {"upserted": n}
 
 
 def apply_customers(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
@@ -673,4 +795,5 @@ HANDLERS = {
     "ij_customers_v1": apply_customers,
     "ij_company_customers_v1": apply_company_customers,
     "ij_pm_db_v2": apply_pm,
+    "ij_contracts_v1": apply_contracts,
 }

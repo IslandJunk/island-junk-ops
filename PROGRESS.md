@@ -25,14 +25,19 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   phone/email/co, department `accounts[]` persist, **upsert-only — never delete-by-absence** since the injected list is
   thousands of rows). **PM tree write-back LIVE too:** `apply_pm` (`ij_pm_db_v2`) upserts the company→group→building tree,
   matching by DB-uuid id else by name so a re-sync (client uid *or* DB id) never duplicates — verified (nested create,
-  round-trip no-dup, edit adds one building, cascade cleanup). *(Still in the cluster: **custom-customer contracts**
-  (Saanich/Oak Bay — `ij_contracts_v1` + rate-sheet `customers[]` → `contract` table) and **area surcharges** (seed
-  Victoria bin surcharges + write-back) — NEXT.)*
+  round-trip no-dup, edit adds one building, cascade cleanup). **Contracts + area surcharges DONE — cluster COMPLETE:**
+  `apply_contracts` (`ij_contracts_v1`, near-1:1 Contract model) + rate-sheet custom customers (`ij_rates_v1.customers[]` →
+  Contract `rc_*`, extras kept in `properties`) both persist + round-trip (`build_contracts_v1`, `build_rates_v1.customers`).
+  **Area surcharges:** added `area_surcharge.roofing_bin_amount` (migration `d83e4b664737`); the rate sheet's "Bin rental &
+  areas" section (`ij_rates_v1.surcharges` + `roofingSurcharges`) now persists via `apply_rates` + emits via `build_rates_v1`;
+  `scripts/seed_surcharges.py` seeded Victoria's 8 areas (base + 7; Sooke roofing $35 vs regular $60 preserved). **All
+  verified** (surcharge edit, custom-customer + contract round-trip, seed, cleanup). So every owner reference screen —
+  rates, disposal, customers, PM, contracts, surcharges — now saves to Postgres.
 
 - **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
   recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.
 - **Foundation** — brand-tagged base/mixins, config, PIN auth + **owner-only guard** (logic layer). Real login on Render.
-- **30 tables** on Render via 10 Alembic migrations (+ maintenance_doc, defect_flag, reminder[+gcal_event_id]): employee, owner_security, device, auth_session,
+- **30 tables** on Render via 11 Alembic migrations (+ maintenance_doc, defect_flag, reminder[+gcal_event_id], area_surcharge[+roofing_bin_amount]): employee, owner_security, device, auth_session,
   colour_map, truck, truck_alert_pref, residential_customer, company_customer, pm_company/group/building,
   job, bin, rate_card, area_surcharge, surcharge_waiver, contract, disposal_facility, disposal_material,
   disposal_rate_history, incident, clock_punch, field_job, weigh_log, yard_processing.
@@ -203,7 +208,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 # from repo root (Windows paths; .venv already exists)
 .venv/Scripts/python.exe -m pip install -r requirements.txt         # 1. deps
 .venv/Scripts/python.exe -c "import app.main; print('imports OK')"   # 2. sanity
-.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = 2a767c88c896)
+.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = d83e4b664737)
 # 4. seed (fresh DB only, in this order):
 .venv/Scripts/python.exe -m scripts.seed_owner
 .venv/Scripts/python.exe -m scripts.seed_crew
@@ -213,6 +218,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 .venv/Scripts/python.exe -m scripts.seed_colours
 .venv/Scripts/python.exe -m scripts.seed_colour_trucks
 .venv/Scripts/python.exe -m scripts.seed_disposal
+.venv/Scripts/python.exe -m scripts.seed_surcharges
 # 5. run
 .venv/Scripts/python.exe -m uvicorn app.main:app                    # http://127.0.0.1:8000/app  (login) · /health
 ```
