@@ -15,6 +15,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.auth.guards import is_owner
+from app.models.bin_field import BinWeigh
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.colour_map import ColourMap
@@ -85,6 +86,66 @@ def build_bins_v1(db: DbSession, brand: Brand) -> list[dict]:
             rec["type"] = b.type
         if b.customer or b.address:
             rec["job"] = {"customer": b.customer or "", "address": b.address or ""}
+        out.append(rec)
+    return out
+
+
+# our BinStatus -> the bin-TRACKER prototype's `status` values (driver tool). Distinct
+# from the registry `state` map above; `stationed`/`leased` ride as booleans, not statuses.
+_BIN_TRACKER_STATUS = {
+    BinStatus.idle: "in_yard", BinStatus.reserved: "in_yard", BinStatus.dropped: "dropped",
+    BinStatus.full: "dropped", BinStatus.returning: "returning", BinStatus.returned: "returning",
+    BinStatus.to_sort: "returning", BinStatus.clearing: "returning", BinStatus.ready_dump: "returning",
+    BinStatus.weighing: "returning", BinStatus.maintenance: "maintenance", BinStatus.retired: "maintenance",
+}
+
+
+def _iso(d) -> str:
+    return d.isoformat() if d else ""
+
+
+def _hm(t) -> str:
+    return t.strftime("%H:%M") if t else ""
+
+
+def _nums(x):
+    """A weight/fee cell: the number, or "" for empty (the tracker's blank convention)."""
+    return float(x) if x is not None else ""
+
+
+def build_bins_full_v1(db: DbSession, brand: Brand) -> list[dict] | None:
+    """`ij_bins_full_v1` — the RICH bin shape the driver's bin-tracker uses (its in-memory
+    `seed()` replacement). Every field the tool reads/derives, so a drop/pick/weigh/repair
+    round-trips through `apply_bins`. Distinct key from the lean `ij_bins_v1` that the
+    registry + yard read, so those screens are untouched. None until the fleet is seeded."""
+    bins = db.scalars(select(Bin).where(Bin.brand == brand)).all()
+    if not bins:
+        return None
+    out: list[dict] = []
+    for b in bins:
+        status = "stationed" if b.stationed else _BIN_TRACKER_STATUS.get(b.status, "in_yard")
+        rec = {
+            "code": b.code, "size": b.size, "lidded": bool(b.lidded), "leased": bool(b.leased),
+            "stationed": bool(b.stationed), "customLid": bool(b.custom_lid), "status": status,
+            "customer": b.customer or "", "address": b.address or "", "town": b.town or "",
+            "roofing": bool(b.roofing), "base": (float(b.base) if b.base is not None else 0),
+            "surcharge": (float(b.surcharge) if b.surcharge is not None else None),
+            "dropDate": _iso(b.drop_date), "dropTime": _hm(b.drop_time), "pickDate": _iso(b.pick_date),
+            "scheduledPickup": _iso(b.scheduled_pickup), "hqTime": _hm(b.hq_time), "lastDumped": _iso(b.last_dumped),
+            "gross": _nums(b.gross), "grossF": _nums(b.gross_f), "grossR": _nums(b.gross_r),
+            "tare": _nums(b.tare), "tareF": _nums(b.tare_f), "tareR": _nums(b.tare_r),
+            "wasteClass": b.waste_class or "", "dumpFee": _nums(b.dump_fee), "extraTime": b.extra_time or "",
+            "pickupBy": b.pickup_by or "", "dumpBy": b.dump_by or "", "sortJunk": b.sort_junk or "",
+            "sortMetal": b.sort_metal or "", "sortTime": (str(b.sort_minutes) if b.sort_minutes is not None else ""),
+            "noSort": bool(b.no_sort), "notes": b.notes or "",
+            "photos": b.photos or [], "contactLog": b.contact_log or [],
+        }
+        if b.job_id:
+            rec["jobId"] = str(b.job_id)
+        if b.repair_note:
+            rec["repairNote"] = b.repair_note
+            rec["repairOpen"] = bool(b.repair_open)
+            rec["repairAt"] = _iso(b.repair_at)
         out.append(rec)
     return out
 
@@ -198,6 +259,24 @@ def build_weighlog_v1(db: DbSession, brand: Brand) -> list | None:
     } for r in rows]
 
 
+def _build_weigh_state(db: DbSession, brand: Brand, kind: str) -> dict | None:
+    """`{k: rec}` of the field weights for `kind`, or None until any exist."""
+    rows = db.scalars(select(BinWeigh).where(BinWeigh.brand == brand, BinWeigh.kind == kind)).all()
+    if not rows:
+        return None
+    return {r.k: r.rec for r in rows}
+
+
+def build_tares_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_tares_v1` — field tare weights keyed 'truck|code'."""
+    return _build_weigh_state(db, brand, "tare")
+
+
+def build_weighins_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_weighins_v1` — field gross weigh-ins keyed 'code'."""
+    return _build_weigh_state(db, brand, "weighin")
+
+
 def build_maint_v2(db: DbSession, brand: Brand) -> dict | None:
     """`ij_maint_v2` — the whole maintenance document. None (keep the prototype's own
     seed) until the hub has been edited + synced for this brand."""
@@ -296,12 +375,15 @@ _BUILDERS = {
     "ij_fleet_v1": build_fleet_v1,
     "ij_colourmap_v1": build_colourmap_v1,
     "ij_bins_v1": build_bins_v1,
+    "ij_bins_full_v1": build_bins_full_v1,
     "ij_employees_v1": build_employees_v1,
     "ij_rates_v1": build_rates_v1,
     "ij_incidents_v1": build_incidents_v1,
     "ij_clock_log": build_clock_log_v1,
     "ij_jobs_v1": build_field_jobs_v1,
     "ij_weighlog_v1": build_weighlog_v1,
+    "ij_tares_v1": build_tares_v1,
+    "ij_weighins_v1": build_weighins_v1,
     "ij_customers_v1": build_customers_v1,
     "ij_company_customers_v1": build_company_customers_v1,
     "ij_pm_db_v2": build_pm_db_v2,

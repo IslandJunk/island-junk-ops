@@ -1,20 +1,30 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-10** — Finished the **reference-data write-back** cluster (every owner-editable screen now saves to Postgres
-*and* the booking consumes those saved rates), retired the booking's demo customers, added two empty editable
+**2026-07-10 (session 2)** — Persisted the **bin-tracker driver tool** (§3.1 NEXT #1's headline piece — it was the last
+big in-memory-only screen). Two parts: **(A)** the driver's own outputs now save — the whole driver day (`ij_binday_v1`),
+field bin weights (`ij_tares_v1` / `ij_weighins_v1`), and the morning gear-check log (`ij_tooldaily_v1`) — plus a fix so
+the driver's weigh events keep their bin code; **(B)** the tracker now reads the **real 75-bin fleet** from the DB instead
+of its hardcoded in-memory `seed()`, and every driver action (drop / pick / return / weigh / mark-fixed / pull-to-service)
+persists back through `apply_bins`. Verified end-to-end in the browser + DB (a pull-to-maintenance survived a reload) with
+no regression to the registry / yard screens that share `ij_bins_v1`.
+
+**2026-07-10 (session 1)** — Finished the **reference-data write-back** cluster (every owner-editable screen now saves to
+Postgres *and* the booking consumes those saved rates), retired the booking's demo customers, added two empty editable
 waste-class spots, and built the **§11 ready-to-invoice queue** on the owner hub. Also fixed a serving bug that was
 silently breaking the owner-hub dashboard. Victoria is now a broadly complete, backed, multi-user app behind the
-approved prototypes; the remaining big pieces are field/dispatch persistence, the external integrations
-(Twilio/Square/Dropbox — need creds), and Nanaimo phase 2.
+approved prototypes; the remaining big pieces are the rest of field/dispatch persistence (day-board overlays, breaks +
+attendance), the external integrations (Twilio/Square/Dropbox — need creds), and Nanaimo phase 2.
 
 **Stack:** FastAPI + SQLAlchemy 2 + Alembic + Postgres (Render, via `.env`). Python 3.14. Serves the approved
 `/prototypes` HTML **untouched** — real DB data is injected inline as `localStorage` in `<head>` before each page's
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree, HEAD `f987c34`, Alembic head **`d83e4b664737`**. Login: **Manager / PIN 1111** or
-**Wes (owner) / PIN 4321**. Preview server config: `.claude/launch.json` (name `api`). Owner Hub has a *second* gate
-(owner password + simulated 2FA) — it's the prototype's own client-side demo; in browser tests call `unlock()` to skip it.
+**Repo state:** clean working tree at the bin-tracker-persistence handoff commit, Alembic head **`44049978642e`**
+(migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
+PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
+restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
+the prototype's own client-side demo; in browser tests call `unlock()` to skip it.
 
 Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-SPEC-scheduling-and-dispatch.md`,
 `island-junk-SPEC-login-sessions-and-access.md`, `island-junk-SPEC-sms-and-texting.md`, `docs/data-model.md`,
@@ -50,6 +60,26 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
   (waste class, stream %, gross/tare/net, dump fee). Yard `#wDone` full sheet click-through browser-verified → margin.
 - **Maintenance + reminders + defect flags** persist: `maintenance_doc` (whole `ij_maint_v2` JSONB doc/brand),
   `defect_flag` (`ij_fixes_v1` + `ij_fixes_resolved_v1`), `reminder` (`ij_reminders_v1`, done=absent reconcile).
+
+**Bin-tracker driver tool → Postgres (was in-memory only) — COMPLETE**
+- **Part A — the driver's own outputs persist** (3 new tables in migration `44049978642e`): `bin_driver_day`
+  (`ij_binday_v1`, the whole sign-in→walk-around→gear→odo→clock→EOD day, verbatim JSONB, keyed brand+driver+date,
+  **write-only** — a shared tablet must not restore another driver's day, and same-device localStorage already restores);
+  `bin_weigh` (`ij_tares_v1` + `ij_weighins_v1`, current field weight per bin, row-per-key, per-key upsert so a concurrent
+  device isn't clobbered, **echoed back** to the driver + yard); `tool_daily_log` (`ij_tooldaily_v1`, morning gear check,
+  keyed brand+truck+date, write-only). Also **fixed `apply_weigh`**: the driver writes `ij_weighlog_v1` with `code`/`kind`
+  (yard uses `bin`/`source`) — the handler now accepts either, so driver weigh events keep their bin code (was landing as
+  `bin=NULL`).
+- **Part B — the tracker reads + persists the REAL fleet.** The prototype built its fleet in memory (`let bins=seed()`)
+  and never touched `ij_bins_v1`, so the injected fleet was ignored and every driver action vanished on reload. New
+  `bin-tracker-bridge.js` reassigns the shared `bins` global from a rich, tracker-shaped injection (`ij_bins_full_v1`, new
+  builder `build_bins_full_v1`) and wraps `render()` (the choke point every board action funnels through) to write `bins`
+  back to `ij_bins_v1` → sync → `apply_bins`. `apply_bins` was expanded to absorb the tracker's rich write (`status` +
+  drop/pick/weigh/repair fields) **present-key-only**, accepting `status` (tracker) OR `state` (registry/yard); it also now
+  persists the yard's `cleared` roofing summary. **`build_bins_v1` stays lean on purpose** — registry + yard-hub +
+  yard-processing read that unchanged, so they're untouched (regression-verified: they still load the lean `state` shape).
+  Browser-proven: real 75-bin fleet loads (16-04 shows DB state, not the seed's demo rental), a pull-to-maintenance +
+  repair note synced to the DB and survived a reload; lean registry/yard write path also re-verified via API.
 
 **Disposal cost model**
 - `scripts/seed_disposal.py`: 7 facilities + **26 materials** (24 + 2 empty editable spots) + rate history.
@@ -106,9 +136,13 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
 
 ## 3. NEXT (in order)
 
-1. **Field/dispatch persistence** — bin-tracker driver tool (richest tool, currently in-memory only → persist),
-   day-board crew overlays (`ij_dayboard_status/notes/sitelog_v1`), and breaks (`ij_breaks_v1`) + attendance
-   (`ij_attendance_v1`). Same model→migration→sync-handler→ref pattern used everywhere else.
+1. **Field/dispatch persistence (bin-tracker DONE this session)** — remaining: day-board crew overlays
+   (`ij_dayboard_status/notes/sitelog_v1`), breaks (`ij_breaks_v1`) + attendance (`ij_attendance_v1`), and the office
+   **day notes** (`ij_daynotes_v1`, written by the owner/yard/truck hubs — the bin-tracker only reads it) + the long-out
+   threshold config (`ij_binsout_cfg_v1`, a 1-field brand setting edited in the owner/management hubs; best folded into a
+   settings table). The bin-tracker's shared punch mirror (`ij_punches_v1`) and its device-local day-board handoff
+   (`ij_active_day_v1`) were **intentionally left unpersisted** — the authoritative clock record already syncs via
+   `ij_clock_log`, and the handoff is ephemeral per-device state. Same model→migration→sync-handler→ref pattern.
 2. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
    payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number.
@@ -158,6 +192,18 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
 - **Bridges mutate `const`s in place** — you can't reassign a top-level `const` (RES, QB_CUST, WASTE_CLASSES, OWNER_ALERTS)
   from a later script, but you CAN mutate its properties / `.length`. That's how the booking/owner-hub bridges retrofit real
   data without touching the prototype files.
+- **…but a top-level `let`/`function` you CAN reassign from a later appended classic script** — all classic (non-module,
+  sloppy-mode) scripts on a page share one global lexical environment, so `bin-tracker-bridge.js` reassigns the prototype's
+  `let bins = seed()` to the real fleet and wraps `function render()` to persist. Confirm the target prototype is classic
+  (no `type="module"`, no `use strict`) before relying on this. Persist on **change only** (snapshot-compare) so the
+  initial injected-fleet repaint doesn't echo the whole fleet back every load.
+- **`ij_bins_v1` is served in TWO shapes on purpose.** `build_bins_v1` = the **lean** registry `state` shape that
+  bin-registry + yard-hub + yard-processing read/write (unchanged — don't "unify" it into those screens). `build_bins_full_v1`
+  = the **rich** driver-tracker `status`+fields shape, injected ONLY on the bin-tracker as `ij_bins_full_v1` (inject-only,
+  NOT in the sync whitelist). Both derive from the same `Bin` row; the tracker persists its rich write back to `ij_bins_v1`.
+  `apply_bins` accepts BOTH (`status` wins over `state`) and is strictly **present-key-only**, so a lean write never blanks a
+  rich field it omits — this is the one guard that keeps the two shapes from clobbering each other. The `Bin` model already
+  carried every rich column (its docstring calls out the three-shape unification); only the two adapters needed widening.
 - **Alembic + shared `brand` enum:** autogenerate emits inline `sa.Enum('victoria','nanaimo', name='brand')` in every new
   migration — hand-edit to a module-level `postgresql.ENUM(..., name='brand', create_type=False)`. New enums: create once
   with `checkfirst=True` + `create_type=False` on columns (see the `reminder_kind` migration).

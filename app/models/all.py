@@ -8,6 +8,7 @@ an import cycle (app.db.base -> app.db.types -> app.models.enums would trigger a
 package __init__ that re-imports models while app.db.base is half-initialized).
 """
 from app.models import (  # noqa: F401
+    bin_field,
     bins,
     clock,
     colour_map,

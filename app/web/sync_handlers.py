@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import or_, select
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.auth.guards import is_owner
 from app.auth.security import hash_pin
 from app.customers.qb_import import company_key, residential_key
+from app.models.bin_field import BinDriverDay, BinWeigh, ToolDailyLog
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.contract import Contract
@@ -63,6 +64,17 @@ def _int(x) -> int | None:
         return None
 
 
+def _ptime(s) -> time | None:
+    """"HH:MM" / "HH:MM:SS" -> time, or None for blank/garbage."""
+    try:
+        parts = str(s).split(":")
+        if not parts[0]:
+            return None
+        return time(hour=int(parts[0]), minute=int(parts[1]) if len(parts) > 1 else 0)
+    except (ValueError, TypeError, IndexError):
+        return None
+
+
 def _ms_dt(ms) -> datetime | None:
     """Prototype Date.now() ms epoch -> aware datetime."""
     try:
@@ -76,10 +88,35 @@ _STATE_REV = {
     "to_sort": BinStatus.to_sort, "clearing": BinStatus.clearing,
     "ready_dump": BinStatus.ready_dump, "retired": BinStatus.retired,
 }
+# bin-TRACKER `status` -> our BinStatus (reverse of refs._BIN_TRACKER_STATUS). "stationed"
+# is intentionally absent — it rides as the `stationed` boolean, not a status.
+_TRACKER_STATUS_REV = {
+    "in_yard": BinStatus.idle, "dropped": BinStatus.dropped,
+    "returning": BinStatus.returning, "maintenance": BinStatus.maintenance,
+}
+# rich bin fields written by the tracker -> (Bin attr, coercion). Present-key-only:
+# a key absent from the record is never touched, so a lean registry/yard write (which
+# omits these) leaves them alone, while the tracker's full write can set/clear them.
+_BIN_BOOL = {"lidded": "lidded", "leased": "leased", "stationed": "stationed",
+             "customLid": "custom_lid", "roofing": "roofing", "noSort": "no_sort",
+             "repairOpen": "repair_open"}
+_BIN_STR = {"town": "town", "notes": "notes", "wasteClass": "waste_class",
+            "extraTime": "extra_time", "pickupBy": "pickup_by", "dumpBy": "dump_by",
+            "sortJunk": "sort_junk", "sortMetal": "sort_metal", "repairNote": "repair_note"}
+_BIN_DATE = {"dropDate": "drop_date", "pickDate": "pick_date",
+             "scheduledPickup": "scheduled_pickup", "lastDumped": "last_dumped", "repairAt": "repair_at"}
+_BIN_TIME = {"dropTime": "drop_time", "hqTime": "hq_time"}
+_BIN_DEC = {"base": "base", "surcharge": "surcharge", "gross": "gross", "tare": "tare",
+            "grossF": "gross_f", "grossR": "gross_r", "tareF": "tare_f", "tareR": "tare_r",
+            "dumpFee": "dump_fee"}
 
 
 def apply_bins(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
-    """Upsert bin state/location by `code`. The fleet is fixed — unknown codes are ignored."""
+    """Upsert bin state/location/rich fields by `code`. The fleet is fixed — unknown codes
+    are ignored. Accepts BOTH shapes on the shared `ij_bins_v1` key: the lean registry/yard
+    write (`state` + nested `job`) and the driver bin-tracker's rich write (`status` + drop/
+    pick/weigh/repair fields). Every field is **present-key-only** — a lean write never
+    blanks the rich fields it omits."""
     if not isinstance(data, list):
         return {"updated": 0, "skipped": "not a list"}
     updated = 0
@@ -89,20 +126,54 @@ def apply_bins(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
         b = db.scalar(select(Bin).where(Bin.brand == brand, Bin.code == rec["code"]))
         if b is None:
             continue
-        changed = False
-        st = _STATE_REV.get(rec.get("state"))
-        if st is not None and b.status != st:
-            b.status, changed = st, True
+
+        # status: the tracker's `status` wins over the registry `state` (a record carries one).
+        st = None
+        if "status" in rec:
+            st = _TRACKER_STATUS_REV.get(rec.get("status"))   # None for "stationed"/unknown -> skip
+        elif "state" in rec:
+            st = _STATE_REV.get(rec.get("state"))
+        if st is not None:
+            b.status = st
+
+        # customer/address: rich top-level fields, else the lean nested `job`.
+        if "customer" in rec:
+            b.customer = rec.get("customer") or None
+        if "address" in rec:
+            b.address = rec.get("address") or None
         job = rec.get("job") if isinstance(rec.get("job"), dict) else None
         if job is not None:
-            cust, addr = (job.get("customer") or None), (job.get("address") or None)
-            if b.customer != cust:
-                b.customer, changed = cust, True
-            if b.address != addr:
-                b.address, changed = addr, True
-        if "type" in rec and b.type != (rec.get("type") or None):
-            b.type, changed = (rec.get("type") or None), True
-        updated += 1 if changed else 0
+            b.customer = job.get("customer") or None
+            b.address = job.get("address") or None
+        if "type" in rec:
+            b.type = rec.get("type") or None
+
+        for key, attr in _BIN_BOOL.items():
+            if key in rec:
+                setattr(b, attr, bool(rec[key]))
+        for key, attr in _BIN_STR.items():
+            if key in rec:
+                setattr(b, attr, (str(rec[key]).strip() or None) if rec[key] not in (None, "") else None)
+        for key, attr in _BIN_DATE.items():
+            if key in rec:
+                setattr(b, attr, _pdate(rec[key]))
+        for key, attr in _BIN_TIME.items():
+            if key in rec:
+                setattr(b, attr, _ptime(rec[key]))
+        for key, attr in _BIN_DEC.items():
+            if key in rec:
+                setattr(b, attr, _dec(rec[key]))
+        if "sortTime" in rec:
+            b.sort_minutes = _int(rec["sortTime"])
+        if "photos" in rec and isinstance(rec["photos"], list):
+            b.photos = rec["photos"]
+        if "contactLog" in rec and isinstance(rec["contactLog"], list):
+            b.contact_log = rec["contactLog"]
+        if "cleared" in rec and isinstance(rec["cleared"], dict):
+            b.cleared = rec["cleared"]
+        if "jobId" in rec:
+            b.job_id = _as_uuid(rec.get("jobId"))
+        updated += 1
     db.commit()
     return {"updated": updated}
 
@@ -241,25 +312,107 @@ def apply_field_jobs(db: DbSession, brand: Brand, data, actor: Employee) -> dict
 
 
 def apply_weigh(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
-    """Append weigh events; dedup by (source_at, bin) so re-syncs don't duplicate."""
+    """Append weigh events; dedup by (source_at, bin) so re-syncs don't duplicate.
+    The yard/truck-hub write `bin`/`source`; the bin-tracker driver writes the same
+    log with `code`/`kind` — accept either so the driver's events keep their bin code."""
     if not isinstance(data, list):
         return {"added": 0}
     added = 0
     for rec in data:
         if not isinstance(rec, dict):
             continue
-        at, binc = rec.get("at"), rec.get("bin")
+        at, binc = rec.get("at"), (rec.get("bin") or rec.get("code"))
         if at is not None and db.scalar(select(WeighLog).where(
                 WeighLog.brand == brand, WeighLog.source_at == at, WeighLog.bin == binc)):
             continue
         db.add(WeighLog(
             brand=brand, source_at=at, weigh_date=_pdate(rec.get("date")), weigh_time=rec.get("time"),
             who=rec.get("who"), truck=rec.get("truck"), bin=binc, cls=rec.get("cls"),
-            source=rec.get("source"), front_kg=rec.get("f"), rear_kg=rec.get("r"), total_kg=rec.get("total"),
+            source=(rec.get("source") or rec.get("kind")), front_kg=rec.get("f"), rear_kg=rec.get("r"),
+            total_kg=rec.get("total"),
         ))
         added += 1
     db.commit()
     return {"added": added}
+
+
+def apply_binday(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_binday_v1` — the bin driver's whole day (verbatim). Upsert by (brand, driver,
+    work_date). Write-only: a fresh no-driver day is skipped, and the day is never echoed
+    back (a shared tablet must not restore another driver's day)."""
+    if not isinstance(data, dict):
+        return {"saved": False, "reason": "not a day object"}
+    driver = (data.get("driver") or "").strip()
+    wd = _pdate(data.get("date"))
+    if not driver or wd is None:
+        return {"saved": False, "reason": "no driver/date yet"}
+    row = db.scalar(select(BinDriverDay).where(
+        BinDriverDay.brand == brand, BinDriverDay.driver == driver, BinDriverDay.work_date == wd))
+    if row is None:
+        row = BinDriverDay(brand=brand, driver=driver, work_date=wd)
+        db.add(row)
+    row.truck = (data.get("truck") or None)
+    row.doc = data
+    db.commit()
+    return {"saved": True, "driver": driver, "date": wd.isoformat()}
+
+
+def _apply_weigh_state(db: DbSession, brand: Brand, kind: str, data) -> dict:
+    """Upsert one field-weight dict (`{k: rec}`) into bin_weigh rows for `kind`. Per-key
+    upsert — a key absent from the payload is left alone (never delete-by-absence, so a
+    concurrent device's entry is safe)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    n = 0
+    for k, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        row = db.scalar(select(BinWeigh).where(
+            BinWeigh.brand == brand, BinWeigh.kind == kind, BinWeigh.k == str(k)))
+        if row is None:
+            row = BinWeigh(brand=brand, kind=kind, k=str(k))
+            db.add(row)
+        row.rec = rec
+        n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def apply_tares(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_tares_v1` — field tare weights keyed 'truck|code'."""
+    return _apply_weigh_state(db, brand, "tare", data)
+
+
+def apply_weighins(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_weighins_v1` — field gross weigh-ins keyed 'code'."""
+    return _apply_weigh_state(db, brand, "weighin", data)
+
+
+def apply_tooldaily(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_tooldaily_v1` — the morning onboard-gear check log. Upsert by (brand, truck,
+    log_date); the tools map replaces wholesale (it's one check per truck per day)."""
+    if not isinstance(data, list):
+        return {"upserted": 0}
+    n = 0
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        truck = str(rec.get("truck") or "").strip()
+        ld = _pdate(rec.get("date"))
+        tools = rec.get("tools") if isinstance(rec.get("tools"), dict) else None
+        if not truck or ld is None or tools is None:
+            continue
+        row = db.scalar(select(ToolDailyLog).where(
+            ToolDailyLog.brand == brand, ToolDailyLog.truck == truck, ToolDailyLog.log_date == ld))
+        if row is None:
+            row = ToolDailyLog(brand=brand, truck=truck, log_date=ld)
+            db.add(row)
+        row.who = rec.get("who")
+        row.logged_when = rec.get("when")
+        row.tools = tools
+        n += 1
+    db.commit()
+    return {"upserted": n}
 
 
 def apply_yard_processing(db: DbSession, brand: Brand, records, actor: Employee) -> dict:
@@ -787,6 +940,10 @@ HANDLERS = {
     "ij_clock_log": apply_clock,
     "ij_jobs_v1": apply_field_jobs,
     "ij_weighlog_v1": apply_weigh,
+    "ij_binday_v1": apply_binday,
+    "ij_tares_v1": apply_tares,
+    "ij_weighins_v1": apply_weighins,
+    "ij_tooldaily_v1": apply_tooldaily,
     "ij_maint_v2": apply_maint,
     "ij_fixes_v1": apply_fixes,
     "ij_fixes_resolved_v1": apply_fixes_resolved,
