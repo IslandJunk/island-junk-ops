@@ -1,0 +1,17 @@
+# Island Junk Ops — backend runtime deps (Python 3.14)
+# Verified importing on this machine 2026-07.
+fastapi==0.139.0
+uvicorn>=0.34,<1.0
+sqlalchemy>=2.0.51,<2.1
+alembic>=1.13
+psycopg[binary]>=3.2
+pydantic-settings>=2.5
+passlib>=1.7            # PIN hashing (pbkdf2_sha256 — pure-python, no native build)
+python-multipart>=0.0.9 # form posts (login)
+itsdangerous>=2.2       # signed session cookies
+tzdata                  # zoneinfo tz database (Windows has none)
+httpx                   # required by starlette TestClient (dev/verify only)
+# Google Calendar (booking write + day-board read; TEST calendar only)
+google-api-python-client>=2.0
+google-auth>=2.0
+google-auth-httplib2>=0.2

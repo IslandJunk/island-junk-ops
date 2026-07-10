@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────
+# SECRETS / CREDENTIALS — NEVER COMMIT
+# ─────────────────────────────────────────────────────────────
+# Google service-account keys (anywhere in the tree)
+**/service-account-key.json
+**/*-key.json
+**/*.credentials.json
+credentials*.json
+client_secret*.json
+token*.json
+
+# Generic secret material
+.env
+.env.*
+secrets/
+*.pem
+*.p12
+*.pfx
+
+# ─────────────────────────────────────────────────────────────
+# Python (spike)
+# ─────────────────────────────────────────────────────────────
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# Spike run output (may echo event data — keep out of git)
+spike/out/

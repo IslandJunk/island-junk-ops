@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Island Junk — Reminders</title>
+<meta name="theme-color" content="#F05014">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reminders">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{--orange:#F05014;--green:#3CA03C;--ink:#141414;--paper:#F4F3F1;--muted:#8b8b8b;--line:#E3DFD8}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{font-family:Inter,system-ui,sans-serif;color:var(--ink);background:var(--paper);min-height:100vh}
+  .wrap{max-width:620px;margin:0 auto;padding:0 16px 60px}
+  .top{text-align:center;padding:22px 0 4px}
+  .top .mk{font-family:Anton,sans-serif;font-size:23px;letter-spacing:1px;color:var(--ink);text-transform:uppercase;line-height:1}
+  .top .mk b{color:var(--orange);font-weight:400}
+  .pill{display:inline-block;margin-top:11px;background:#141414;color:#fff;border-radius:30px;font-family:Anton,sans-serif;font-weight:400;letter-spacing:4px;font-size:15px;padding:8px 20px;text-transform:uppercase;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  .pill .d{color:var(--orange);margin:0 6px}
+  .nav{display:flex;gap:10px;margin:14px 0 2px}
+  .nav a{flex:1;text-align:center;background:#141414;color:#fff;text-decoration:none;border-radius:12px;padding:13px 0;font-weight:800;font-size:14px}
+  .nav a:active{transform:scale(.99)}
+  .hero{background:#fff;border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,.10);padding:28px 18px 20px;text-align:center;margin-top:12px}
+  .mic{width:128px;height:128px;border-radius:50%;border:none;background:var(--orange);color:#fff;font-size:50px;cursor:pointer;box-shadow:0 10px 28px rgba(240,80,20,.32);transition:transform .1s}
+  .mic:active{transform:scale(.96)}
+  .mic.live{background:#C8401F;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(200,64,31,.45)}70%{box-shadow:0 0 0 20px rgba(200,64,31,0)}100%{box-shadow:0 0 0 0 rgba(200,64,31,0)}}
+  .mic-lbl{font-family:Anton,sans-serif;font-size:20px;letter-spacing:.5px;text-transform:uppercase;margin-top:14px;color:var(--ink)}
+  .mic-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .status{font-size:14px;color:var(--ink);margin-top:14px;min-height:20px;line-height:1.45}
+  .status .ok{color:var(--green);font-weight:800}
+  .status .undo{color:var(--orange);font-weight:800;text-decoration:underline;cursor:pointer;margin-left:6px}
+  .status .warn{color:#9a6a00}
+  .type{background:#fff;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.07);padding:14px;margin-top:14px}
+  .type textarea{width:100%;box-sizing:border-box;min-height:54px;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;line-height:1.4;resize:vertical;background:#fff;color:var(--ink)}
+  .type .row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .type .row span{font-size:12px;color:var(--muted)}
+  .type input[type=date]{flex:1;min-width:120px;padding:8px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink)}
+  .type .add{width:100%;margin-top:9px;padding:12px;border:none;border-radius:10px;background:#141414;color:#fff;font-size:15px;font-weight:800;cursor:pointer}
+  .lh{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:22px 2px 2px}
+  .card{background:#fff;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.07);padding:2px 14px;margin-top:8px}
+  .item{display:flex;gap:11px;align-items:flex-start;padding:13px 0;border-bottom:1px solid #efece8}
+  .item:last-child{border-bottom:none}
+  .item .ck{flex:none;width:26px;height:26px;border:2px solid #cfcac4;border-radius:50%;background:#fff;cursor:pointer;font-size:14px;line-height:1;color:var(--green);padding:0}
+  .item .ck:active{background:#f0fbf0}
+  .item .tx{flex:1;min-width:0}
+  .item .tt{font-size:15px;line-height:1.35;color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap}
+  .item .mt{font-size:11.5px;color:#9a9a9a;margin-top:3px}
+  .item .resume{display:inline-block;margin-top:7px;background:#F05014;color:#fff;text-decoration:none;font-weight:800;font-size:12.5px;padding:7px 12px;border-radius:9px}
+  .tag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:20px;margin-right:6px}
+  .tag.over{color:#C8401F;background:#FBE9E4}
+  .tag.today{color:#9a6a00;background:#FBF1D6}
+  .tag.future{color:#5a7a9a;background:#EAF1F7}
+  .empty{text-align:center;color:#9a9a9a;font-size:14px;padding:24px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="mk">ISLAND JUNK <b>SOLUTIONS</b></div>
+    <div class="pill"><span class="d">—</span>REMINDERS<span class="d">—</span></div>
+  </div>
+  <div class="nav"><a href="island-junk-main-hub.html">‹ Main Hub</a></div>
+
+  <div class="hero">
+    <button id="mic" class="mic" onclick="micTap()">🎤</button>
+    <div class="mic-lbl">Tap and talk</div>
+    <div class="mic-sub">Say it — it saves itself to the list</div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="type">
+    <textarea id="rmText" placeholder="…or type a reminder"></textarea>
+    <div class="row"><span>Due (optional)</span><input type="date" id="rmDue"></div>
+    <button class="add" onclick="addTyped()">Add reminder</button>
+  </div>
+
+  <div class="lh" id="lh">Reminders</div>
+  <div class="card"><div id="rmList"></div></div>
+</div>
+<script>
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function rmAll(){try{var a=JSON.parse(localStorage.getItem('ij_reminders_v1')||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}}
+  function rmSave(a){try{localStorage.setItem('ij_reminders_v1',JSON.stringify(a));}catch(e){}}
+  function rmOpen(){return rmAll().filter(function(x){return x&&!x.done;});}
+  function rmToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function rmAdd(text,due){var a=rmAll();var id='r'+Date.now()+'_'+Math.floor(Math.random()*1e4);a.push({id:id,text:text,by:'Quick add',ts:Date.now(),due:due||''});rmSave(a);return id;}
+  function rmDone(id){rmSave(rmAll().filter(function(x){return x.id!==id;}));renderList();}
+  function rmDueLabel(s){var p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'});}
+  function rmDueState(s){if(!s)return '';var t=rmToday();return s<t?'over':(s===t?'today':'future');}
+  function rmWhen(ts){try{var d=new Date(ts),n=new Date();return (d.toDateString()===n.toDateString())?('today '+d.toLocaleTimeString('en-CA',{hour:'numeric',minute:'2-digit'})):d.toLocaleDateString('en-CA',{month:'short',day:'numeric'});}catch(e){return '';}}
+  function rmSortOpen(list){var rank={over:0,today:1,future:2,'':3};return list.slice().sort(function(a,b){var ra=rank[rmDueState(a.due||'')],rb=rank[rmDueState(b.due||'')];if(ra!==rb)return ra-rb;if((a.due||b.due)&&(a.due||'')!==(b.due||''))return (a.due||'').localeCompare(b.due||'');return (b.ts||0)-(a.ts||0);});}
+  function itemHtml(it){var ds=rmDueState(it.due||''),due='';
+    if(ds==='over')due='<span class="tag over">Overdue · '+esc(rmDueLabel(it.due))+'</span>';
+    else if(ds==='today')due='<span class="tag today">Due today</span>';
+    else if(ds==='future')due='<span class="tag future">Due '+esc(rmDueLabel(it.due))+'</span>';
+    return '<div class="item"><button class="ck" data-done="'+esc(it.id)+'" title="Done">✓</button><div class="tx"><div class="tt">'+esc(it.text)+'</div>'+(it.booking?'<a class="resume" href="island-junk-new-booking-v67.html?resume='+encodeURIComponent(it.id)+'">Resume booking ›</a>':'')+'<div class="mt">'+due+'added '+esc(rmWhen(it.ts))+(it.by?' · '+esc(it.by):'')+'</div></div></div>';}
+  function renderList(){var open=rmSortOpen(rmOpen());document.getElementById('lh').textContent=open.length?(open.length+(open.length===1?' open reminder':' open reminders')):'All clear';document.getElementById('rmList').innerHTML=open.length?open.map(itemHtml).join(''):'<div class="empty">Nothing on the list yet. Tap the mic and talk.</div>';}
+  function setStatus(html){document.getElementById('status').innerHTML=html;}
+  function setMic(live){var m=document.getElementById('mic');if(live){m.classList.add('live');m.textContent='●';}else{m.classList.remove('live');m.textContent='🎤';}}
+  function addTyped(){var b=document.getElementById('rmText'),d=document.getElementById('rmDue');var t=(b?b.value:'').trim();if(!t){if(b)b.focus();return;}rmAdd(t,d&&d.value?d.value:'');b.value='';if(d)d.value='';renderList();setStatus('<span class="ok">Added ✓</span>');}
+  var rec=null,listening=false,lastId=null;
+  function micTap(){
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){setStatus('<span class="warn">Voice isn’t available in this browser — type below, or tap your keyboard’s mic.</span>');return;}
+    if(listening){try{rec.stop();}catch(e){}return;}
+    try{rec=new SR();}catch(e){setStatus('<span class="warn">Voice can’t start here — use the box below.</span>');return;}
+    rec.lang='en-CA';rec.interimResults=true;rec.continuous=false;
+    var finalT='',errored=false;
+    listening=true;setMic(true);setStatus('Listening… talk now, then pause.');
+    rec.onresult=function(e){var fin='',int='';for(var i=0;i<e.results.length;i++){if(e.results[i].isFinal)fin+=e.results[i][0].transcript;else int+=e.results[i][0].transcript;}finalT=fin;var show=(fin+int).trim();if(show)setStatus('“'+esc(show)+'”');};
+    rec.onerror=function(ev){errored=true;listening=false;setMic(false);var na=ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed');setStatus('<span class="warn">'+(na?'Mic is blocked here — type below, or tap your keyboard’s mic.':'Didn’t catch that — tap and talk again, or type below.')+'</span>');};
+    rec.onend=function(){listening=false;setMic(false);if(errored)return;var t=finalT.trim();if(t){lastId=rmAdd(t,'');renderList();setStatus('<span class="ok">Added ✓</span> “'+esc(t)+'”<span class="undo" onclick="undoLast()">undo</span>');}else{setStatus('Nothing heard — tap and talk again, or type below.');}};
+    try{rec.start();}catch(e){listening=false;setMic(false);setStatus('<span class="warn">Couldn’t start voice — use the box below.</span>');}
+  }
+  function undoLast(){if(lastId){rmDone(lastId);lastId=null;setStatus('Removed.');}}
+  document.getElementById('rmList').addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('[data-done]'):null;if(b){rmDone(b.getAttribute('data-done'));}});
+  renderList();
+</script>
+</body>
+</html>

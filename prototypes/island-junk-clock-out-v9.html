@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clock Out — Island Junk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--orange:#F05014;--green:#3CA03C;--amber:#E8A317;--ink:#141414;--muted:#8b8b8b;--line:#E3DFD8;--stop:#C8401F;--card:#fff;--shadow:0 6px 18px rgba(0,0,0,.10)}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:Inter,system-ui,sans-serif;color:#f4f1ec;
+    background:radial-gradient(1200px 600px at 50% -10%,#2a2a2a 0%,#1a1a1a 45%,#101010 100%),linear-gradient(180deg,#161616,#0d0d0d);background-attachment:fixed;padding-bottom:40px}
+
+  header{background:radial-gradient(440px 150px at 50% 4%,rgba(240,80,20,.08),rgba(240,80,20,0) 72%),linear-gradient(180deg,#ffffff 0%,#fbf9f4 100%);border-bottom:3px solid var(--orange);box-shadow:0 12px 34px rgba(0,0,0,.5);padding:11px 0 10px;position:sticky;top:0;z-index:30}
+  .wrap{max-width:780px;margin:0 auto;padding:0 14px}
+  .hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .tool{font-family:"Anton",sans-serif;font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:#f4f1ec;line-height:1;display:inline-flex;align-items:center;gap:9px;background:#161616;border:1px solid rgba(240,80,20,.5);padding:7px 15px 6px;border-radius:999px;box-shadow:0 5px 14px rgba(0,0,0,.3)}
+  .tool::before,.tool::after{content:"";width:13px;height:2px;background:var(--orange);display:inline-block;border-radius:2px}
+  .back{display:inline-flex;align-items:center;gap:6px;color:var(--orange);font-weight:800;font-size:13px;text-decoration:none;background:#fff;border:1.5px solid var(--orange);border-radius:999px;padding:8px 14px 8px 12px;line-height:1;box-shadow:0 2px 7px rgba(0,0,0,.13)}
+  .back:active{background:#fff3ee}
+  .back .cv{font-size:17px;line-height:1;margin-top:-1px;font-weight:700}
+
+  .bar{margin-top:14px}
+  .barlbl{font-family:"Anton",sans-serif;letter-spacing:.05em;text-transform:uppercase;font-size:12px;color:#bdbbb6;margin:0 2px 6px}
+  .seg{display:flex;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:13px;padding:4px;gap:4px}
+  .seg button{flex:1;border:none;background:transparent;color:#cfcfcf;font-family:"Anton",sans-serif;letter-spacing:.06em;text-transform:uppercase;font-size:13.5px;padding:10px 0;border-radius:10px;cursor:pointer}
+  .seg button.on{background:var(--orange);color:#fff;box-shadow:0 4px 12px rgba(240,80,20,.4)}
+  .people{display:flex;gap:8px;overflow-x:auto;padding:2px 0 2px;-webkit-overflow-scrolling:touch}
+  .people::-webkit-scrollbar{display:none}
+  .pchip{flex:0 0 auto;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#dcdad5;border-radius:999px;padding:9px 14px;font-weight:700;font-size:13.5px;cursor:pointer;white-space:nowrap}
+  .pchip.on{background:#fff;border-color:#fff;color:#141414}
+  .pchip .pk{font-size:10px;font-weight:800;letter-spacing:.04em;color:#1F8A82;text-transform:uppercase}
+
+  /* your card */
+  .me{background:#fff;color:#141414;border-radius:16px;padding:16px 16px 17px;box-shadow:var(--shadow);border-top:4px solid var(--orange);margin-top:16px}
+  .me .nm{font-family:"Anton",sans-serif;font-size:24px;letter-spacing:.01em;line-height:1.05}
+  .me .ro{color:#7d7a73;font-size:13px;font-weight:600;margin-top:2px}
+  .statline{display:flex;align-items:center;gap:9px;margin-top:13px;font-size:14px;font-weight:600;color:#33312d}
+  .dot{width:11px;height:11px;border-radius:50%;flex:none}
+  .dot.on{background:#0B8043;box-shadow:0 0 0 4px rgba(11,128,67,.16)}
+  .dot.off{background:#b9b6ae}
+  .elapsed{margin-left:auto;font-family:"Anton",sans-serif;font-size:15px;background:#f1efe9;border-radius:8px;padding:4px 10px;letter-spacing:.02em}
+  .cbtn{margin-top:15px;width:100%;border:none;border-radius:13px;padding:16px;font-family:"Anton",sans-serif;letter-spacing:.05em;text-transform:uppercase;font-size:17px;cursor:pointer;background:var(--orange);color:#fff;box-shadow:0 6px 16px rgba(240,80,20,.35)}
+  .cbtn:active{transform:translateY(1px)}
+  .cbtn.done{background:#eef0ec;color:#7d8a78;box-shadow:none;cursor:default}
+  .outrow{display:flex;gap:9px;align-items:stretch;margin-top:15px}
+  .outrow .cbtn{margin-top:0;flex:1}
+  .tin{font-family:Inter,system-ui,sans-serif;font-size:15px;font-weight:700;color:#141414;background:#f4f3f1;border:1.5px solid #e3dfd8;border-radius:13px;padding:0 12px;width:120px;flex:none;min-height:0;text-align:center;letter-spacing:.04em}
+  .tin:focus{outline:none;border-color:var(--orange)}
+  .mhint{font-size:11.5px;color:#9a988f;margin-top:8px;line-height:1.45}
+  .lagline{font-size:13px;font-weight:600;color:#9a4a16;background:#fdf0e7;border:1px solid #f6d2bd;border-radius:10px;padding:9px 11px;margin-top:11px}
+  .lagline b{color:#C8401F}
+  .gapline{font-size:12.5px;font-weight:600;color:#5c5a54;background:#f4f3f1;border:1px solid #e7e3db;border-radius:10px;padding:9px 11px;margin-top:11px}
+  .gapline b{color:#141414}
+  .rowact{margin-left:auto;flex:none;display:flex;gap:7px;align-items:center}
+  .tin.sm{width:98px;font-size:14px;padding:9px;background:#fff;border-color:#e3dfd8}
+  .crow .who .s .lag{color:#C8401F;font-weight:700}
+  .handoff .ho-flag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.04em;color:#fff;background:var(--orange,#F05014);border-radius:999px;padding:5px 11px;margin-bottom:11px;text-transform:uppercase}
+  .ho-div{height:1px;background:var(--line,#e3dfd8);margin:17px 0 13px}
+  .ho-ask{font-size:14px;font-weight:800;color:#141414}
+  .ho-ask .ho-note{display:block;font-size:11.5px;font-weight:600;color:#9a958c;margin-top:4px;line-height:1.45}
+  .ho-row{display:flex;align-items:center;gap:10px;margin-top:11px}
+  .ho-row .ho-who{flex:1;min-width:0;font-weight:700;font-size:15px;color:#141414}
+  .ho-allout{font-size:13px;font-weight:700;color:#3CA03C;margin-top:11px}
+
+  .seclbl{font-family:"Anton",sans-serif;letter-spacing:.05em;text-transform:uppercase;font-size:13px;color:#cfcdc7;margin:22px 2px 4px}
+  .secsub{font-size:12px;color:#94918b;margin:0 2px 11px;line-height:1.45}
+
+  .crow{display:flex;align-items:center;gap:12px;background:#fff;color:#141414;border-radius:13px;padding:11px 13px;box-shadow:var(--shadow);margin-bottom:9px}
+  .crow .who{min-width:0}
+  .crow .who .n{font-weight:800;font-size:15px;line-height:1.1}
+  .crow .who .s{font-size:12px;color:#7d7a73;margin-top:2px}
+  .crow .who .s b{color:#0B8043;font-weight:700}
+  .rowbtn{margin-left:auto;flex:none;border:none;background:var(--orange);color:#fff;border-radius:10px;padding:10px 15px;font-weight:800;font-size:13.5px;cursor:pointer}
+  .rowbtn:active{transform:translateY(1px)}
+  .crow.out{background:rgba(255,255,255,.05);color:#cdcbc5;box-shadow:none;border:1px solid rgba(255,255,255,.10)}
+  .crow.out .who .n{color:#e7e5e0;font-weight:700}
+  .crow.out .who .s{color:#9a988f}
+  .outtag{margin-left:auto;flex:none;font-size:12px;font-weight:700;color:#cdcbc5;background:rgba(255,255,255,.07);border-radius:999px;padding:6px 12px}
+
+  .empty{background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.18);border-radius:13px;padding:20px 14px;text-align:center;color:#9a988f;font-size:13.5px}
+
+  .note{font-size:12px;color:#9a988f;line-height:1.55;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:11px;padding:12px 13px;margin-top:20px}
+  .note b{color:#cfcdc7}
+  .reset{display:inline-block;margin-top:11px;color:#bdbbb6;font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer}
+
+  /* overdue clock-out alert */
+  @keyframes alpulse{0%,100%{box-shadow:0 8px 22px rgba(200,64,31,.22)}50%{box-shadow:0 8px 30px rgba(200,64,31,.5)}}
+  .alert{background:#3a1410;border:1px solid #C8401F;border-left:5px solid #C8401F;border-radius:14px;padding:13px 14px;margin-top:16px;animation:alpulse 1.6s ease-in-out infinite}
+  .al-top{display:flex;align-items:center;gap:11px}
+  .al-ic{font-size:22px;flex:none;line-height:1}
+  .al-tx{min-width:0}
+  .al-h{font-family:"Anton",sans-serif;font-size:16px;letter-spacing:.01em;color:#ffd9cf;text-transform:uppercase;line-height:1.12}
+  .al-s{font-size:13.5px;color:#f6c3b6;font-weight:700;margin-top:3px}
+  .al-snd{margin-left:auto;flex:none;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#fff;border-radius:10px;padding:9px 12px;font-weight:800;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  .al-note{font-size:11.5px;color:#d8a99c;margin-top:9px}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:#141414;color:#fff;border:1px solid rgba(240,80,20,.5);padding:12px 18px;border-radius:12px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:.22s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:90%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* clock-in card */
+  .cin{background:#fff;border:1.5px solid #E5E3DF;border-radius:14px;padding:14px 15px;margin-bottom:12px}
+  .cin-h{font-family:"Anton",sans-serif;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#6E6E6E;margin-bottom:8px}
+  .cin-time{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  .cin-clk{font-family:"Anton",sans-serif;font-size:26px;color:#141414;line-height:1}
+  .cin-clk.ok{color:#3CA03C}
+  .cin-sub{font-size:12.5px;color:#6E6E6E}
+  .cin-tag{font-size:12px;font-weight:700;color:#3CA03C}
+  .cin-pend{margin-top:10px;font-size:13px;color:#8a6d00;background:#FFF7DD;border:1px solid #F2D98C;border-radius:9px;padding:9px 11px}
+  .cin-deny{margin-top:10px;font-size:13px;color:#6E6E6E;background:#F4F3F1;border-radius:9px;padding:9px 11px}
+  .cin-note{font-size:13px;color:#6E6E6E}
+  .cin-eb{margin-top:12px;width:100%;border:1.5px dashed #F05014;background:#fff;color:#F05014;border-radius:11px;padding:11px;font-weight:700;font-size:14px;cursor:pointer}
+  .cin-ef{margin-top:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="hd">
+      <a class="back" href="island-junk-main-hub.html"><span class="cv">&#8249;</span> Main hub</a>
+      <span class="tool">Clock In / Out</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- viewing-as (prototype switch so you can see crew vs manager) -->
+  <div class="bar">
+    <div class="barlbl">Viewing as (prototype)</div>
+    <div class="people" id="people"></div>
+  </div>
+
+  <div id="app"></div>
+
+  <div class="note" id="foot"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- stores (shared with the rest of the app) ---------- */
+function lsGet(k){try{var r=localStorage.getItem(k);return r?JSON.parse(r):null;}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c];});}
+
+/* roster: same source of truth + same demo seed as Employee Hours */
+var EMP_SEED=[
+  {name:"Wes Roberts",role:"Owner",clockOthers:true,tracked:false},
+  {name:"Paul Garside",role:"Main manager",clockOthers:true,tracked:false},
+  {name:"Jesse Patno",role:"Truck manager",clockOthers:true,tracked:true},
+  {name:"Brody Ingram-Johnson",role:"Yard manager",clockOthers:true,tracked:true},
+  {name:"Zack Zeinstra",role:"Truck crew",tracked:true},
+  {name:"Dylan Sparrow",role:"Truck crew",tracked:true},
+  {name:"Ashton Reid",role:"Truck crew",tracked:true},
+  {name:"Spencer Smith",role:"Truck crew",tracked:true},
+  {name:"Michael Opikokew",role:"Truck crew",tracked:true},
+  {name:"Tyler Kowalczyk",role:"Truck crew",tracked:true},
+  {name:"Troy Moore",role:"Bin truck driver",tracked:true},
+  {name:"Chris Barkhouse",role:"Yard crew",tracked:true},
+  {name:"Cody Sutton",role:"Crew",tracked:true},
+  {name:"Taryn Tuckwell",role:"Yard / bin crew",tracked:true}
+];
+function roster(){var e=lsGet("ij_employees_v1");var l=(Array.isArray(e)&&e.length)?e:EMP_SEED;return l.filter(function(p){return p&&p.active!==false;});}
+function isManager(p){return /manager|owner/i.test((p&&p.role)||"");}
+
+/* ---------- date / time ---------- */
+function d2(n){return (n<10?"0":"")+n;}
+function todayIso(){var d=new Date();return d.getFullYear()+"-"+d2(d.getMonth()+1)+"-"+d2(d.getDate());}
+function nowClock(){var d=new Date();var h=d.getHours(),mi=d.getMinutes();var ap=h>=12?"pm":"am";var hh=h%12||12;return hh+":"+d2(mi)+ap;}
+function nowMin(){var d=new Date();return d.getHours()*60+d.getMinutes();}
+function clockToMin(str){
+  if(str==null)return null;
+  var m=String(str).trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/);
+  if(!m)return null;
+  var h=parseInt(m[1],10),mi=parseInt(m[2],10),ap=m[3];
+  if(mi>59)return null;
+  if(ap){if(h<1||h>12)return null;if(ap==="pm"&&h!==12)h+=12;if(ap==="am"&&h===12)h=0;}
+  return h*60+mi;
+}
+function fmtDur(min){if(min==null||min<=0)return "0m";var h=Math.floor(min/60),mi=min%60;var s="";if(h)s+=h+"h";if(mi)s+=(s?" ":"")+mi+"m";return s||"0m";}
+function minToClock(min){min=((Math.round(min)%1440)+1440)%1440;var h=Math.floor(min/60),mi=min%60;var ap=h>=12?"pm":"am";var hh=h%12||12;return hh+":"+d2(mi)+ap;}
+function hhmmToClock(v){var m=String(v).match(/^(\d{1,2}):(\d{2})$/);if(!m)return null;var h=+m[1],mi=+m[2];if(h>23||mi>59)return null;return minToClock(h*60+mi);}
+/* parse a plain typed number into a clock string. 230->2:30pm, 1230->12:30pm, 430->4:30pm, 1130->11:30am.
+   no colon / no am-pm needed: for a clock-OUT, 7-11 = am and 12 + 1-6 = pm (the workday never overlaps). */
+function looseToClock(str){
+  if(str==null)return null;
+  var s=String(str).trim().toLowerCase();
+  if(!s)return null;
+  var ap=/p/.test(s)?"pm":(/a/.test(s)?"am":null);
+  var hadColon=s.indexOf(":")>=0;
+  var digits=s.replace(/[^0-9]/g,"");
+  if(!digits)return null;
+  var h,mi;
+  if(hadColon){var p=s.replace(/[^0-9:]/g,"").split(":");h=parseInt(p[0],10);mi=parseInt(p[1]||"0",10);}
+  else if(digits.length<=2){h=parseInt(digits,10);mi=0;}
+  else if(digits.length===3){h=parseInt(digits.slice(0,1),10);mi=parseInt(digits.slice(1),10);}
+  else if(digits.length===4){h=parseInt(digits.slice(0,2),10);mi=parseInt(digits.slice(2),10);}
+  else return null;
+  if(isNaN(h)||isNaN(mi)||mi>59)return null;
+  if(h>=13&&h<=23){ap=h>=12?"pm":"am";h=h-12;}
+  else if(h===0||h===24){h=12;if(!ap)ap="am";}
+  if(h<1||h>12)return null;
+  if(!ap)ap=(h>=7&&h<=11)?"am":"pm";
+  var H=h%12;if(ap==="pm")H+=12;
+  return minToClock(H*60+mi);
+}
+function cssId(s){return String(s).replace(/[^A-Za-z0-9]/g,"_");}
+
+/* ---------- punch log (ij_clock_log) — the layer Employee Hours reads ----------
+   entry = {name, at:"<ISO datetime>", inTime:"7:30am", outTime:null|"3:42pm", doneAt:null|"3:10pm"}
+   doneAt = end-of-day checklist finished (set by the truck/bin hubs); gap = outTime - doneAt */
+function clog(){var l=lsGet("ij_clock_log");return Array.isArray(l)?l:[];}
+function setClog(l){lsSet("ij_clock_log",l);}
+function openEntry(name){
+  var iso=todayIso(),l=clog(),found=null;
+  l.forEach(function(e){if(e&&e.name===name&&String(e.at).slice(0,10)===iso&&e.inTime&&!e.outTime)found=e;});
+  return found;
+}
+function doneEntry(name){
+  var iso=todayIso(),l=clog(),found=null;
+  l.forEach(function(e){if(e&&e.name===name&&String(e.at).slice(0,10)===iso&&e.outTime)found=e;});
+  return found;
+}
+function onClock(name){return !!openEntry(name);}
+function clockOut(name){
+  var iso=todayIso(),l=clog(),out=nowClock();
+  for(var i=l.length-1;i>=0;i--){var e=l[i];
+    if(e&&e.name===name&&String(e.at).slice(0,10)===iso&&e.inTime&&!e.outTime){e.outTime=out;setClog(l);return out;}
+  }
+  return null;
+}
+/* manual clock-out — for when someone forgot and is entering the time after the fact */
+function clockOutAt(name,clockStr){
+  var iso=todayIso(),l=clog();
+  for(var i=l.length-1;i>=0;i--){var e=l[i];
+    if(e&&e.name===name&&String(e.at).slice(0,10)===iso&&e.inTime&&!e.outTime){e.outTime=clockStr;setClog(l);return clockStr;}
+  }
+  return null;
+}
+
+/* In production the hub-pick at sign-in creates the clock-in. The prototype has no
+   live login, so seed today's clock-ins once so there's someone to clock out. */
+function seedToday(){
+  var iso=todayIso(),l=clog(),changed=false;
+  roster().forEach(function(p){
+    if(p.tracked===false)return;
+    var has=l.some(function(e){return e&&e.name===p.name&&String(e.at).slice(0,10)===iso;});
+    if(!has){var hm=setTimeFor(p.name);l.push({name:p.name,at:iso+"T"+hm+":00",inTime:hhmmToClock(hm)||"7:30am",outTime:null,doneAt:null});changed=true;}
+  });
+  /* demo: show the "done on the truck -> clocked out" gap before the hubs are wired.
+     doneAt = the moment the end-of-day checklist is finished; outTime = the actual clock-out. */
+  var r=roster().filter(function(p){return p.tracked!==false;});
+  function entryFor(nm){var f=null;l.forEach(function(e){if(e&&e.name===nm&&String(e.at).slice(0,10)===iso)f=e;});return f;}
+  if(r[1]){var e1=entryFor(r[1].name);          /* finished the truck, still hasn't clocked out -> live lag */
+    if(e1&&!e1.outTime&&!e1.doneAt){var dm=Math.max(clockToMin(e1.inTime)+5,nowMin()-22);e1.doneAt=minToClock(dm);changed=true;}}
+  if(r[2]){var e2=entryFor(r[2].name);          /* finished AND clocked out -> a completed gap */
+    if(e2&&!e2.outTime){e2.doneAt="2:52pm";e2.outTime="3:25pm";changed=true;}}
+  if(changed)setClog(l);
+}
+function resetDemo(){
+  var iso=todayIso();
+  setClog(clog().filter(function(e){return !(e&&String(e.at).slice(0,10)===iso);}));
+  seedToday();render();toast("Demo reset \u2014 crew back on the clock");
+}
+
+/* ---------- who am I (prototype) ---------- */
+var VIEW_NAME=null;
+function me(){
+  var r=roster();
+  if(VIEW_NAME){for(var i=0;i<r.length;i++){if(r[i].name===VIEW_NAME)return r[i];}}
+  for(var j=0;j<r.length;j++){if(r[j].clockOthers)return r[j];}   /* default to someone who can clock others out */
+  return r[0]||{name:"Crew",role:""};
+}
+
+/* ---------- render ---------- */
+var app=document.getElementById("app");
+function toast(t){var el=document.getElementById("toast");el.textContent=t;el.classList.add("show");clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove("show");},2400);}
+
+/* ---------- overdue clock-out alert (cutoff set in Owner Hub) ---------- */
+function overdueCfg(){var c=lsGet("ij_overdue_alert_v1");if(!c||typeof c!=="object")c={};return {on:c.on!==false,cutoff:(typeof c.cutoff==="string"&&/^\d{2}:\d{2}$/.test(c.cutoff))?c.cutoff:"16:30"};}
+function cutoffMin(hhmm){var p=String(hhmm).split(":");return (+p[0])*60+(+p[1]);}
+function fmt12hm(s){var p=String(s).split(":");var h=+p[0],m=p[1];var ap=h>=12?"pm":"am";var hh=h%12||12;return hh+":"+m+ap;}
+function overdueNow(){
+  var c=overdueCfg();if(!c.on)return null;
+  if(!me().clockOthers)return null;            /* the alert is a manager job: only people who can clock others out get it */
+  if(nowMin()<cutoffMin(c.cutoff))return null;
+  var on=roster().filter(function(p){return onClock(p.name);});
+  if(!on.length)return null;
+  return {cutoff:c.cutoff,names:on.map(function(p){return p.name;})};
+}
+function overdueBanner(od){
+  var who=od.names.map(function(n){return esc(n);}).join(", ");
+  return '<div class="alert"><div class="al-top"><span class="al-ic">\u26A0\uFE0F</span>'
+    +'<div class="al-tx"><div class="al-h">Still on the clock past '+esc(fmt12hm(od.cutoff))+'</div><div class="al-s">'+who+'</div></div>'
+    +'<button class="al-snd" onclick="beep()">\uD83D\uDD14 Sound</button></div>'
+    +'<div class="al-note">In the live app this texts the manager\u2019s phone.</div></div>';
+}
+var _actx=null,alertBeeped=false;
+function beep(){
+  try{
+    if(!_actx)_actx=new (window.AudioContext||window.webkitAudioContext)();
+    if(_actx.state==="suspended")_actx.resume();
+    var t=_actx.currentTime;
+    [0,0.2].forEach(function(off){
+      var o=_actx.createOscillator(),g=_actx.createGain();
+      o.type="sine";o.frequency.value=880;
+      o.connect(g);g.connect(_actx.destination);
+      g.gain.setValueAtTime(0.0001,t+off);
+      g.gain.exponentialRampToValueAtTime(0.28,t+off+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+off+0.16);
+      o.start(t+off);o.stop(t+off+0.17);
+    });
+  }catch(e){}
+}
+
+/* ---------- clock-IN side: each person's set start + early-start request ---------- */
+function schedGet(){var s=lsGet("ij_clock_schedule_v1");return (s&&s.positions)?s:{positions:{"Yard crew":"07:00","Truck crew":"07:30","Bin truck":"07:30"},people:{}};}
+function roleToCrew(role){role=String(role||"").toLowerCase();if(/yard/.test(role))return "Yard crew";if(/bin/.test(role))return "Bin truck";return "Truck crew";}
+function crewOf(p){var s=schedGet();var c=(s.people[p&&p.name]&&s.people[p.name].crew);if(c&&s.positions[c])return c;return roleToCrew(p&&p.role);}
+function setTimeFor(name){var s=schedGet();var p=null,r=roster();for(var i=0;i<r.length;i++){if(r[i].name===name){p=r[i];break;}}if(!p)p={name:name,role:""};var crew=crewOf(p);var ov=(s.people[name]&&s.people[name].override)||"";return ov||s.positions[crew]||"07:30";}
+function earlyDB(){var x=lsGet("ij_early_clockin_v1");return (x&&typeof x==="object")?x:{};}
+function saveEarly(x){lsSet("ij_early_clockin_v1",x);}
+function myEarly(name){var iso=todayIso(),db=earlyDB();return (db[iso]&&db[iso][name])||null;}
+function submitEarly(name,clk){var iso=todayIso(),db=earlyDB();db[iso]=db[iso]||{};db[iso][name]={requested:clk,status:"pending",at:new Date().toISOString()};saveEarly(db);}
+function looseToClockMorning(str){
+  if(str==null)return null;var s=String(str).trim().toLowerCase();if(!s)return null;
+  var pm=/p/.test(s);var hadColon=s.indexOf(":")>=0;var digits=s.replace(/[^0-9]/g,"");if(!digits)return null;
+  var h,mi;
+  if(hadColon){var pr=s.replace(/[^0-9:]/g,"").split(":");h=parseInt(pr[0],10);mi=parseInt(pr[1]||"0",10);}
+  else if(digits.length<=2){h=parseInt(digits,10);mi=0;}
+  else if(digits.length===3){h=parseInt(digits.slice(0,1),10);mi=parseInt(digits.slice(1),10);}
+  else if(digits.length===4){h=parseInt(digits.slice(0,2),10);mi=parseInt(digits.slice(2),10);}
+  else return null;
+  if(mi>59)return null;var ap=pm?"pm":"am";
+  if(h===0){h=12;ap="am";} if(h<1||h>12)return null;
+  var H=h%12;if(ap==="pm")H+=12;return minToClock(H*60+mi);
+}
+function clockInCard(p){
+  if(!p)return "";
+  if(p.tracked===false)return '<div class="cin"><div class="cin-h">Today\u2019s start</div><div class="cin-note">Your hours aren\u2019t tracked.</div></div>';
+  var setHM=setTimeFor(p.name), setClk=hhmmToClock(setHM)||"7:30am";
+  var er=myEarly(p.name);
+  var h='<div class="cin"><div class="cin-h">Today\u2019s start</div>';
+  if(er&&er.status==="approved"){
+    h+='<div class="cin-time"><span class="cin-clk ok">'+esc(er.requested)+'</span><span class="cin-tag">early start OK\u2019d \u2713</span></div>';
+  }else{
+    h+='<div class="cin-time"><span class="cin-clk">'+esc(setClk)+'</span><span class="cin-sub">set start \u00b7 '+esc(crewOf(p))+'</span></div>';
+    if(er&&er.status==="pending"){h+='<div class="cin-pend">\u23F3 Early start of '+esc(er.requested)+' \u2014 waiting for a manager to OK it</div>';}
+    else if(er&&er.status==="denied"){h+='<div class="cin-deny">Early start wasn\u2019t approved \u2014 your set '+esc(setClk)+' stands</div>';}
+  }
+  if(!er||er.status==="denied"){
+    h+='<button class="cin-eb" onclick="toggleEarly()">I started early today</button>';
+    h+='<div class="cin-ef" id="earlyForm" style="display:none"><div class="outrow"><input type="text" inputmode="numeric" id="earlyIn" class="tin" placeholder="630" maxlength="5"><button class="cbtn" onclick="submitEarlyMe()">Send to manager</button></div><div class="mhint">Type the time you started \u2014 630, 645. A manager OKs it; otherwise your set time stands.</div></div>';
+  }
+  h+='</div>';return h;
+}
+window.toggleEarly=function(){var f=document.getElementById("earlyForm");if(f)f.style.display=(f.style.display==="none"?"block":"none");};
+window.submitEarlyMe=function(){var v=document.getElementById("earlyIn");if(!v||!v.value.trim()){toast("Type the time you started");return;}var c=looseToClockMorning(v.value);if(!c){toast("Type the time like 630");return;}var setClk=hhmmToClock(setTimeFor(me().name));if(clockToMin(c)!=null&&clockToMin(setClk)!=null&&clockToMin(c)>=clockToMin(setClk)){toast("That\u2019s not earlier than your "+setClk+" start");return;}submitEarly(me().name,c);render();toast("Sent \u2014 a manager will OK your "+c+" start");};
+
+function meCard(){
+  var p=me(),html="";
+  var oe=openEntry(p.name), de=doneEntry(p.name);
+  html+='<div class="me"><div class="nm">'+esc(p.name)+'</div><div class="ro">'+esc(p.role||"")+'</div>';
+  if(oe){
+    var el=fmtDur(nowMin()-clockToMin(oe.inTime));
+    html+='<div class="statline"><span class="dot on"></span>On the clock since '+esc(oe.inTime)+'<span class="elapsed">'+el+'</span></div>';
+    if(oe.doneAt&&clockToMin(oe.doneAt)!=null&&clockToMin(oe.doneAt)>=clockToMin(oe.inTime)&&nowMin()>=clockToMin(oe.doneAt)){
+      html+='<div class="lagline">Done on the truck at '+esc(oe.doneAt)+' &middot; <b>still on the clock &mdash; '+fmtDur(nowMin()-clockToMin(oe.doneAt))+'</b></div>';
+    }
+    html+='<div class="outrow"><input type="text" inputmode="numeric" id="meOut" class="tin" placeholder="330" maxlength="5"><button class="cbtn" onclick="clockOutMeSmart()">Clock out</button></div>';
+    html+='<div class="mhint">Type your out time as a number &mdash; 230, 1230, 430 &mdash; or leave it blank to clock out now.</div>';
+  } else if(de){
+    var tot=fmtDur(clockToMin(de.outTime)-clockToMin(de.inTime));
+    html+='<div class="statline"><span class="dot off"></span>Clocked out at '+esc(de.outTime)+'<span class="elapsed">'+tot+' today</span></div>';
+    if(de.doneAt&&clockToMin(de.doneAt)!=null&&clockToMin(de.outTime)!=null){
+      var g=clockToMin(de.outTime)-clockToMin(de.doneAt);
+      html+='<div class="gapline">Done on the truck '+esc(de.doneAt)+' &rarr; clocked out '+esc(de.outTime)+' &middot; <b>'+fmtDur(g<0?0:g)+' gap</b></div>';
+    }
+    html+='<button class="cbtn done">Clocked out &#10003;</button>';
+  } else {
+    html+='<div class="statline"><span class="dot off"></span>Not on the clock today</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+/* ---------- truck handoff: lead lands here after finishing the checklist, with the "also clock out the crew?" prompt ---------- */
+function handoffCard(){
+  if(!HANDOFF)return meCard();
+  var lead=HANDOFF.mgr, truck=HANDOFF.truck;
+  var crew=(HANDOFF.crew||[]).filter(function(n){return n&&n!==lead;});
+  var crewOpen=crew.filter(function(n){return openEntry(n);});
+  var leadOpen=openEntry(lead), leadDone=doneEntry(lead);
+  var h='<div class="me handoff">';
+  h+=HANDOFF.yard?'<div class="ho-flag">Yard &middot; done for the day</div>':('<div class="ho-flag">Truck #'+esc(truck)+' &middot; finished on the truck</div>');
+  h+='<div class="nm">'+esc(lead)+'</div><div class="ro">You &middot; clock yourself out</div>';
+  if(leadOpen){
+    h+='<div class="outrow"><input type="text" inputmode="numeric" id="hoLead" class="tin" placeholder="330" maxlength="5"><button class="cbtn" onclick="hoClockLead()">Clock out</button></div>';
+    h+='<div class="mhint">Type your out time as a number, or leave blank for now.</div>';
+  } else if(leadDone){
+    h+='<div class="statline"><span class="dot off"></span>You clocked out at '+esc(leadDone.outTime)+'</div>';
+  } else {
+    h+='<div class="statline"><span class="dot off"></span>Not on the clock today</div>';
+  }
+  if(crew.length){
+    h+='<div class="ho-div"></div>';
+    h+='<div class="ho-ask">Also clock out your crew?<span class="ho-note">If someone jumped to another truck, leave them &mdash; that truck clocks them out.</span></div>';
+    if(crewOpen.length){
+      crewOpen.forEach(function(n){
+        h+='<div class="ho-row"><div class="ho-who">'+esc(n)+'</div><div class="rowact"><input type="text" inputmode="numeric" id="ho_'+cssId(n)+'" class="tin sm" placeholder="330" maxlength="5"><button class="rowbtn" onclick="hoClockCrew(\''+esc(n)+'\')">Clock out</button></div></div>';
+      });
+    } else {
+      h+='<div class="ho-allout">Your crew is already clocked out &#10003;</div>';
+    }
+  }
+  h+='</div>';
+  return h;
+}
+function hoClockLead(){var v=document.getElementById("hoLead"),t;if(v&&v.value.trim()){var c=looseToClock(v.value);if(!c){toast("Type the time like 330");return;}t=clockOutAt(HANDOFF.mgr,c);}else t=clockOut(HANDOFF.mgr);render();toast(t?("You\u2019re clocked out \u2014 "+t):"Already clocked out");}
+function hoClockCrew(n){var v=document.getElementById("ho_"+cssId(n)),t;if(v&&v.value.trim()){var c=looseToClock(v.value);if(!c){toast("Type the time like 330");return;}t=clockOutAt(n,c);}else t=clockOut(n);render();toast(t?(n+" clocked out \u2014 "+t):(n+" already clocked out"));}
+
+function crewList(){
+  if(!me().clockOthers)return "";
+  var meName=me().name, r=roster();
+  var onList=[], outList=[];
+  r.forEach(function(p){
+    if(p.name===meName)return;            /* your own card is above */
+    if(onClock(p.name))onList.push(p);
+    else if(doneEntry(p.name))outList.push(p);
+  });
+  var h='<div class="seclbl">Clock out a crew member</div>';
+  h+='<div class="secsub">'+esc(me().name)+' can clock crew out &mdash; a per-person setting in Owner Hub &rarr; access (<b>Clock-out powers</b>).</div>';
+  if(!onList.length){
+    h+='<div class="empty">Everyone\u2019s clocked out.</div>';
+  } else {
+    onList.forEach(function(p){
+      var oe=openEntry(p.name), el=fmtDur(nowMin()-clockToMin(oe.inTime));
+      var lagNote='';
+      if(oe.doneAt&&clockToMin(oe.doneAt)!=null&&clockToMin(oe.doneAt)>=clockToMin(oe.inTime)&&nowMin()>=clockToMin(oe.doneAt)){
+        lagNote=' &middot; <span class="lag">done '+esc(oe.doneAt)+', out pending '+fmtDur(nowMin()-clockToMin(oe.doneAt))+'</span>';
+      }
+      h+='<div class="crow"><div class="who"><div class="n">'+esc(p.name)+'</div>'
+        +'<div class="s">'+esc(p.role||"")+' &middot; <b>on since '+esc(oe.inTime)+'</b> &middot; '+el+lagNote+'</div></div>'
+        +'<div class="rowact"><input type="text" inputmode="numeric" id="out_'+cssId(p.name)+'" class="tin sm" placeholder="330" maxlength="5"><button class="rowbtn" onclick="clockOutPersonSmart(\''+esc(p.name)+'\')">Clock out</button></div></div>';
+    });
+  }
+  if(outList.length){
+    h+='<div class="seclbl" style="margin-top:18px">Clocked out today</div>';
+    outList.forEach(function(p){
+      var de=doneEntry(p.name);
+      var gap='';
+      if(de.doneAt&&clockToMin(de.doneAt)!=null&&clockToMin(de.outTime)!=null){
+        var g=clockToMin(de.outTime)-clockToMin(de.doneAt);gap=' &middot; '+fmtDur(g<0?0:g)+' gap';
+      }
+      h+='<div class="crow out"><div class="who"><div class="n">'+esc(p.name)+'</div>'
+        +'<div class="s">'+esc(p.role||"")+(de.doneAt?(' &middot; done '+esc(de.doneAt)):'')+gap+'</div></div>'
+        +'<span class="outtag">'+esc(de.outTime)+'</span></div>';
+    });
+  }
+  return h;
+}
+
+function render(){
+  var od=overdueNow();
+  if(HANDOFF){
+    app.innerHTML=handoffCard();
+  } else {
+    app.innerHTML=(od?overdueBanner(od):"")+clockInCard(me())+meCard()+crewList();
+  }
+  document.getElementById("foot").innerHTML=
+    'Clock-in is automatic at each person\u2019s <b>set start time</b> (Clock-in times, in the Manager &amp; Owner Hub). Started before that? Send the time and a manager OKs it \u2014 otherwise the set time stands. This screen is also the <b>clock out</b>. '
+    +'Tapping it stamps the time into the same record <b>Employee Hours</b> reads, so the day fills in there. '
+    +'The <b>overdue alert</b> shows only to people who can clock others out, when someone\u2019s still on the clock past the cutoff (set in <b>Owner Hub &rarr; access</b>) &mdash; the live app texts the manager, here it\u2019s a banner + demo tone (tap <b>Sound</b>). '
+    +'Forgot to clock out? Type the time as a plain number (230, 1230, 430) instead of tapping &mdash; it stamps that time. '
+    +'When a truck crew finishes the end-of-day checklist it records <b>done on the truck</b>; the difference between that and the actual clock-out is the <b>gap</b> shown here. '
+    +'On a personal phone, clocking out just stops the clock; on a shared tablet it returns to login. '
+    +'Crew names, times and the alert are prototype demo data. '
+    +'<span class="reset" onclick="resetDemo()">Reset demo</span>';
+  if(od && !alertBeeped && !HANDOFF){alertBeeped=true;beep();}
+  if(!od)alertBeeped=false;
+}
+
+function renderPeople(){
+  var cur=me().name;
+  document.getElementById("people").innerHTML=roster().map(function(p){
+    return '<button class="pchip'+(p.name===cur?" on":"")+'" onclick="setPerson(\''+esc(p.name)+'\')">'+esc(p.name)+(p.clockOthers?' <span class="pk">+crew</span>':'')+'</button>';
+  }).join("");
+}
+function setPerson(n){VIEW_NAME=n;renderPeople();render();}
+function clockOutMeSmart(){
+  var v=document.getElementById("meOut"),t;
+  if(v&&v.value.trim()){var c=looseToClock(v.value);if(!c){toast("Type the time like 330");return;}t=clockOutAt(me().name,c);}
+  else t=clockOut(me().name);
+  render();toast(t?("You\u2019re clocked out \u2014 "+t):"Already clocked out");
+}
+function clockOutPersonSmart(n){
+  var v=document.getElementById("out_"+cssId(n)),t;
+  if(v&&v.value.trim()){var c=looseToClock(v.value);if(!c){toast("Type the time like 330");return;}t=clockOutAt(n,c);}
+  else t=clockOut(n);
+  render();toast(t?(n+" clocked out \u2014 "+t):(n+" already clocked out"));
+}
+
+/* ---------- boot ---------- */
+var HANDOFF=null;
+(function(){
+  try{
+    var q=new URLSearchParams(location.search);
+    var from=q.get("from");
+    if(from==="truck"){
+      var crew=(q.get("crew")||"").split(",").map(function(s){return s.trim();}).filter(Boolean);
+      HANDOFF={mgr:q.get("mgr")||crew[0]||"",truck:q.get("truck")||"",crew:crew};
+      VIEW_NAME=HANDOFF.mgr;
+    } else if(from==="yard"){
+      HANDOFF={yard:true,mgr:q.get("name")||"",truck:"",crew:[]};
+      VIEW_NAME=HANDOFF.mgr;
+    }
+    if(HANDOFF){
+      var pe=document.getElementById("people");if(pe)pe.style.display="none";
+      var ph=document.getElementById("peopleHint");if(ph)ph.style.display="none";
+    }
+  }catch(e){}
+})();
+seedToday();
+renderPeople();
+render();
+setInterval(render,60000);   /* keep the "elapsed" times fresh */
+</script>
+</body>
+</html>
