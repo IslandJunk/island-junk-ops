@@ -17,7 +17,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 - **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
   recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.
 - **Foundation** — brand-tagged base/mixins, config, PIN auth + **owner-only guard** (logic layer). Real login on Render.
-- **27 tables** on Render via 8 Alembic migrations: employee, owner_security, device, auth_session,
+- **30 tables** on Render via 9 Alembic migrations (+ maintenance_doc, defect_flag, reminder): employee, owner_security, device, auth_session,
   colour_map, truck, truck_alert_pref, residential_customer, company_customer, pm_company/group/building,
   job, bin, rate_card, area_surcharge, surcharge_waiver, contract, disposal_facility, disposal_material,
   disposal_rate_history, incident, clock_punch, field_job, weigh_log, yard_processing.
@@ -35,6 +35,18 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   + a dedicated yard endpoint: **bins, roster (owner-guarded), incidents, clock in/out, job completion (field_job),
   yard weigh, and the yard-processing rich record** (waste class, stream %, gross/tare/net, dump fee — the disposal
   cost-model input). All verified against Render.
+- **Maintenance + reminders persistence + 48h CC-charge reminder LIVE + tested.** Migration `46d1bfdb249d` adds
+  3 tables (Render migrated). **Maintenance** (`ij_maint_v2`) persists as one JSONB **doc per brand** (`maintenance_doc`)
+  — the whole `{order,m,_v}` verbatim, so the prototype's structure + client-side migrations are untouched.
+  **Defect flags** (`ij_fixes_v1` walk-arounds → `defect_flag`): upsert-by-id, closed via `ij_fixes_resolved_v1`.
+  **Reminders** (`ij_reminders_v1` → `reminder`): upsert-by-id + "done = removed from list" reconcile, scoped to
+  app kinds so it never clobbers owner CC-charge rows. New sync handlers (`apply_maint/fixes/fixes_resolved/reminders`)
+  + `sync-bridge.js` whitelist + refs (`build_maint_v2/fixes_v1/reminders_v1`) wired to the maintenance/reminders/truck
+  screens. **§9/§11 48-hour CC-charge reminder** (`app/reminders/service.py`): auto-created at booking for
+  `residential_bin` (due = drop+48h, `kind=cc_charge`, "CC? UNPAID (DATE)…manual"), owner-only queue
+  `GET /reminders?kind=cc_charge` + `POST /reminders/{id}/done` + manual `POST /reminders/cc-charge`. **The charge
+  stays manual** (guardrail §2). **Verified end-to-end** on Render (blob round-trip, flag add+resolve, reminder
+  reconcile leaving CC-charge intact, auto-create due=drop+48h, owner check-off, manager 403; all test rows deleted).
 - **QuickBooks customer import (§13) — core LIVE + tested.** `app/customers/qb_import.py` parses a **QuickBooks
   Customer Contact List** CSV (skips the report preamble, BOM; **alias-mapped headers** cover QBO *and* Desktop
   wordings; stitches split billing address). Classifies commercial vs residential (Company column ⇒ company; splits
@@ -81,14 +93,13 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 3. NEXT (in order)
 
-1. **Maintenance + reminders persistence** — build `maintenance` (`ij_maint_v2`) + `reminder` (`ij_reminders_v1`) tables
-   + sync handlers to finish write-coverage. Include the §9/§11 **48-hour residential-bin CC-charge reminder** (auto-create
-   on residential-bin completion, off-board reminder calendar, owner check-off — charge stays manual).
-2. **Verify booking lanes 3–7** + the yard `#wDone` click in a browser.
-3. **Integrations** — first outbound: Twilio booking-confirmation text OR a Square payment link on the job
-   (see `island-junk-SPEC-sms-and-texting.md` for the shared send-only updates line).
-4. **Drive the yard waste-class picker from the disposal registry** (retire the hardcoded `WASTE_CLASSES` — see §2).
-5. **Confirm QB import vs Wes's real export** + retire the `QB_CUST/QB_COMM` demo consts (see §2).
+1. **Verify in a browser** — booking lanes 3–7, the yard `#wDone` click, and now the maintenance-hub / reminders /
+   truck-hub screens reading + writing real data (the sync round-trips are proven at the API layer, not yet clicked through).
+2. **Integrations** — first outbound: Twilio booking-confirmation text OR a Square payment link on the job
+   (see `island-junk-SPEC-sms-and-texting.md` for the shared send-only updates line). Then the **off-board Google
+   reminder-calendar mirror** for CC-charge reminders (write-only to a dedicated reminder calendar — needs its id, §4).
+3. **Drive the yard waste-class picker from the disposal registry** (retire the hardcoded `WASTE_CLASSES` — see §2).
+4. **Confirm QB import vs Wes's real export** + retire the `QB_CUST/QB_COMM` demo consts (see §2).
 
 ---
 
@@ -114,6 +125,11 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   QBO + Desktop). **Provide a real export** to lock the mapping (any unrecognised header → add to `COLUMN_ALIASES`).
   Also: businesses entered in QB with a **blank Company column** import as residential (a flat contact list can't tell)
   — the preview's untick lets the owner catch these. Confirm this is acceptable.
+- **CC-charge reminder — two open points.** (a) The **off-board reminder calendar id** isn't set, so the reminder lives
+  only in the app's `reminder` store for now; the Google-calendar mirror (write-only) is deferred until the id exists.
+  (b) `due = drop + 48h` uses **plain calendar days** (weekend/stat handling like the bin billable-day rule isn't applied)
+  — confirm 48h means calendar hours. Also the auto-trigger fires **at booking** (planned drop date); if a real
+  "residential-bin dropped" completion event is added later, call `add_cc_charge_reminder` there instead/again.
 - *Resolved this session (in docs/data-model.md):* Flamingo = residential unpaid (CC **or** e-transfer), status-only;
   bin truck = Graphite/Blueberry; Tomato→Flamingo lifecycle; 7 booking lanes; merged bin lifecycle enum; dispatch
   `truck` table separate from a future maintenance `vehicle` table.
@@ -155,7 +171,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 # from repo root (Windows paths; .venv already exists)
 .venv/Scripts/python.exe -m pip install -r requirements.txt         # 1. deps
 .venv/Scripts/python.exe -c "import app.main; print('imports OK')"   # 2. sanity
-.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = 4cd57b8ea105)
+.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = 46d1bfdb249d)
 # 4. seed (fresh DB only, in this order):
 .venv/Scripts/python.exe -m scripts.seed_owner
 .venv/Scripts/python.exe -m scripts.seed_crew

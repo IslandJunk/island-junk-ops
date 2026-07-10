@@ -9,7 +9,7 @@ from sqlalchemy import Enum as SAEnum
 
 from app.models.enums import (
     AccountType, BinAction, BinStatus, BookingLane, Brand, ColourKind, ContractPricing,
-    CustomerKind, CustomerSource, DeviceType, DisposalRole, JobStatus, PayType, TruckKind,
+    CustomerKind, CustomerSource, DeviceType, DisposalRole, JobStatus, PayType, ReminderKind, TruckKind,
 )
 
 brand_enum = SAEnum(Brand, name="brand")
@@ -26,3 +26,4 @@ customer_kind_enum = SAEnum(CustomerKind, name="customer_kind")
 bin_status_enum = SAEnum(BinStatus, name="bin_status")
 contract_pricing_enum = SAEnum(ContractPricing, name="contract_pricing")
 disposal_role_enum = SAEnum(DisposalRole, name="disposal_role")
+reminder_kind_enum = SAEnum(ReminderKind, name="reminder_kind")

@@ -6,7 +6,7 @@ whole-array sync). Removal is explicit (`active: false` / a status), not by omis
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session as DbSession
@@ -16,9 +16,11 @@ from app.auth.security import hash_pin
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.employee import Employee
-from app.models.enums import BinStatus, Brand, OWNER_ONLY_GRANTABLE, PayType
+from app.models.enums import BinStatus, Brand, OWNER_ONLY_GRANTABLE, PayType, ReminderKind
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
+from app.models.maintenance import DefectFlag, MaintenanceDoc
+from app.models.reminder import Reminder
 from app.models.weigh import WeighLog
 from app.models.yard_processing import YardProcessing
 
@@ -48,6 +50,14 @@ def _int(x) -> int | None:
     try:
         return int(x) if x not in (None, "", False) else None
     except (ValueError, TypeError):
+        return None
+
+
+def _ms_dt(ms) -> datetime | None:
+    """Prototype Date.now() ms epoch -> aware datetime."""
+    try:
+        return datetime.fromtimestamp(float(ms) / 1000, tz=timezone.utc) if ms else None
+    except (ValueError, TypeError, OSError):
         return None
 
 # registry `state` -> our BinStatus (reverse of refs._BIN_STATE; lossy but canonical)
@@ -279,6 +289,101 @@ def apply_yard_processing(db: DbSession, brand: Brand, records, actor: Employee)
     return {"saved": saved}
 
 
+def apply_maint(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert the whole maintenance document (`ij_maint_v2` = {order, m, _v}) — one row
+    per brand. Stored verbatim as JSONB so the prototype's structure + client-side
+    migrations are preserved."""
+    if not isinstance(data, dict) or "m" not in data:
+        return {"saved": False, "reason": "not a maintenance doc"}
+    doc = db.scalar(select(MaintenanceDoc).where(MaintenanceDoc.brand == brand))
+    if doc is None:
+        db.add(MaintenanceDoc(brand=brand, doc=data))
+    else:
+        doc.doc = data
+    db.commit()
+    return {"saved": True, "assets": len(data.get("m") or {})}
+
+
+def apply_fixes(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert crew walk-around defect flags (`ij_fixes_v1`) by source id. Never
+    delete-by-absence — closing is explicit via `ij_fixes_resolved_v1`."""
+    if not isinstance(data, list):
+        return {"upserted": 0}
+    n = 0
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        sid = rec.get("id")
+        f = db.scalar(select(DefectFlag).where(
+            DefectFlag.brand == brand, DefectFlag.source_id == sid)) if sid else None
+        if f is None:
+            f = DefectFlag(brand=brand, source_id=sid)
+            db.add(f)
+        f.truck, f.item, f.note, f.who = rec.get("truck"), rec.get("item"), rec.get("note"), rec.get("who")
+        f.flag_date, f.source = rec.get("date"), rec.get("source")
+        if rec.get("open") is not None:
+            f.is_open = bool(rec.get("open"))
+        n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def apply_fixes_resolved(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Close defect flags the maintenance/yard hub marked fixed (`ij_fixes_resolved_v1`
+    = {source_id: ms-ts})."""
+    if not isinstance(data, dict):
+        return {"resolved": 0}
+    n = 0
+    for sid, ts in data.items():
+        f = db.scalar(select(DefectFlag).where(DefectFlag.brand == brand, DefectFlag.source_id == sid))
+        if f is None:
+            f = DefectFlag(brand=brand, source_id=sid, is_open=False)
+            db.add(f)
+        f.is_open = False
+        if f.resolved_at is None:
+            f.resolved_at = _ms_dt(ts)
+        n += 1
+    db.commit()
+    return {"resolved": n}
+
+
+def apply_reminders(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert the app reminder list (`ij_reminders_v1`) by id. The prototype removes a
+    reminder from the list when it's done, so we reconcile: any app-managed reminder
+    (general/booking_draft) no longer in the list is marked done. cc_charge reminders are
+    owner-managed via their own endpoint and are never touched by an absent list entry."""
+    if not isinstance(data, list):
+        return {"upserted": 0}
+    seen: set[str] = set()
+    n = 0
+    for rec in data:
+        if not isinstance(rec, dict) or not rec.get("id"):
+            continue
+        sid = rec["id"]
+        seen.add(sid)
+        r = db.scalar(select(Reminder).where(Reminder.brand == brand, Reminder.source_id == sid))
+        if r is None:
+            r = Reminder(brand=brand, source_id=sid,
+                         kind=ReminderKind.booking_draft if rec.get("booking") else ReminderKind.general)
+            db.add(r)
+        elif r.kind == ReminderKind.cc_charge:
+            continue  # never let the app list overwrite an owner CC-charge reminder
+        r.text, r.by, r.ts = rec.get("text"), rec.get("by"), _int(rec.get("ts"))
+        r.due = _pdate(rec.get("due"))
+        r.booking = bool(rec.get("booking"))
+        r.name, r.addr = rec.get("name"), rec.get("addr")
+        r.draft = rec.get("draft") if isinstance(rec.get("draft"), dict) else None
+        r.done = bool(rec.get("done", False))
+        n += 1
+    closed = 0
+    for r in db.scalars(select(Reminder).where(
+            Reminder.brand == brand, Reminder.done.is_(False), Reminder.kind != ReminderKind.cc_charge)).all():
+        if r.source_id not in seen:
+            r.done, closed = True, closed + 1
+    db.commit()
+    return {"upserted": n, "closed": closed}
+
+
 HANDLERS = {
     "ij_bins_v1": apply_bins,
     "ij_employees_v1": apply_employees,
@@ -286,4 +391,8 @@ HANDLERS = {
     "ij_clock_log": apply_clock,
     "ij_jobs_v1": apply_field_jobs,
     "ij_weighlog_v1": apply_weigh,
+    "ij_maint_v2": apply_maint,
+    "ij_fixes_v1": apply_fixes,
+    "ij_fixes_resolved_v1": apply_fixes_resolved,
+    "ij_reminders_v1": apply_reminders,
 }

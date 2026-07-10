@@ -183,8 +183,10 @@ Supporting: `weigh_log` (`ij_weighlog_v1` append-only truck+bin weights), `tares
 
 ### `reminder` (`ij_reminders_v1`) — shared store, marking done = delete
 `{id, text, by, ts, due date, done bool, booking bool, name, addr, draft jsonb}` (booking drafts render "Resume booking").
-⚠ **The 48-h residential-bin CC-charge reminder (§9/§11) is NOT built.** Add: `reminder_kind ENUM(general|cc_charge|booking_draft)`,
-a `calendar` field (CC-charge reminders live on a **separate off-board reminder calendar**), auto-create on residential-bin completion `due=drop+48h`, owner check-off. **Charge stays manual** (guardrail §2.3).
+✅ **BUILT (2026-07-09):** `reminder` table with `reminder_kind ENUM(general|cc_charge|booking_draft)` + `calendar` +
+`job_id` FK. The 48-h residential-bin CC-charge reminder auto-creates at booking (`due=drop+48h`), owner check-off via
+`POST /reminders/{id}/done`. **Charge stays manual** (guardrail §2.3). Still TODO: the Google reminder-calendar mirror
+(needs the off-board calendar id). See PROGRESS.md.
 
 ---
 

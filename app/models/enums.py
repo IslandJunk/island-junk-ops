@@ -117,6 +117,14 @@ class PayType(str, enum.Enum):
     hourly = "hourly"
 
 
+class ReminderKind(str, enum.Enum):
+    """`ij_reminders_v1` rows. cc_charge = the §9/§11 48-hour residential-bin
+    card-charge reminder (auto-created, owner checks off; the charge stays manual)."""
+    general = "general"
+    cc_charge = "cc_charge"
+    booking_draft = "booking_draft"   # a saved booking the manager can resume
+
+
 # Access flags are stored as a text[] on employee (not a DB enum — the set can
 # grow). Canonical list proposed in docs/data-model.md (resolves the 3-way
 # prototype drift). Confirm before go-live.

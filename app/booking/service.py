@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.integrations import gcal
 from app.models.enums import AccountType, BookingLane, Brand, CustomerKind, JobStatus
 from app.models.job import Job
+from app.reminders.service import add_cc_charge_reminder
 
 SAGE_COLOR_ID = 2  # locked Unassigned — every new job starts here
 
@@ -83,6 +84,10 @@ def create_booking(
             summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,
             on_date=on_date, start_time=time_start, end_time=time_end,
         )
+    # §9/§11: a residential bin gets a 48-hour CC-charge reminder (charge stays manual).
+    if account_type == AccountType.residential_bin:
+        add_cc_charge_reminder(db, brand, drop_date=on_date, job_id=job.id,
+                               name=customer_name, addr=address, by="booking")
     db.commit()
     db.refresh(job)
     return job

@@ -19,10 +19,12 @@ from app.models.clock import ClockPunch
 from app.models.colour_map import ColourMap
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
-from app.models.enums import BinStatus, Brand, ColourKind, PayType
+from app.models.enums import BinStatus, Brand, ColourKind, PayType, ReminderKind
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
+from app.models.maintenance import DefectFlag, MaintenanceDoc
 from app.models.rates import DisposalFacility, DisposalMaterial, RateCard
+from app.models.reminder import Reminder
 from app.models.truck import Truck
 from app.models.weigh import WeighLog
 
@@ -176,6 +178,37 @@ def build_weighlog_v1(db: DbSession, brand: Brand) -> list | None:
     } for r in rows]
 
 
+def build_maint_v2(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_maint_v2` — the whole maintenance document. None (keep the prototype's own
+    seed) until the hub has been edited + synced for this brand."""
+    doc = db.scalar(select(MaintenanceDoc).where(MaintenanceDoc.brand == brand))
+    return doc.doc if (doc and doc.doc) else None
+
+
+def build_fixes_v1(db: DbSession, brand: Brand) -> list | None:
+    """`ij_fixes_v1` — OPEN crew defect flags only (resolved ones are simply omitted).
+    None until real flags exist."""
+    rows = db.scalars(select(DefectFlag).where(
+        DefectFlag.brand == brand, DefectFlag.is_open.is_(True))).all()
+    if not rows:
+        return None
+    return [{"id": r.source_id, "truck": r.truck, "item": r.item, "note": r.note,
+             "who": r.who, "date": r.flag_date, "open": True, "source": r.source} for r in rows]
+
+
+def build_reminders_v1(db: DbSession, brand: Brand) -> list | None:
+    """`ij_reminders_v1` — OPEN app reminders (general + booking drafts). CC-charge
+    reminders live on the owner's separate queue (`GET /reminders`), not this screen.
+    None until real reminders exist."""
+    rows = db.scalars(select(Reminder).where(
+        Reminder.brand == brand, Reminder.done.is_(False), Reminder.kind != ReminderKind.cc_charge)).all()
+    if not rows:
+        return None
+    return [{"id": r.source_id, "text": r.text, "by": r.by, "ts": r.ts,
+             "due": r.due.isoformat() if r.due else "", "booking": r.booking,
+             "name": r.name, "addr": r.addr, "draft": r.draft} for r in rows]
+
+
 def build_customers_v1(db: DbSession, brand: Brand) -> list | None:
     """`ij_customers_v1` (residential autofill). None until real customers exist.
     NOTE: coexists with the booking screen's small hardcoded `QB_CUST` demo const —
@@ -234,6 +267,9 @@ _BUILDERS = {
     "ij_customers_v1": build_customers_v1,
     "ij_company_customers_v1": build_company_customers_v1,
     "ij_pm_db_v2": build_pm_db_v2,
+    "ij_maint_v2": build_maint_v2,
+    "ij_fixes_v1": build_fixes_v1,
+    "ij_reminders_v1": build_reminders_v1,
 }
 
 
