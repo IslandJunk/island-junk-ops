@@ -445,6 +445,14 @@ def build_binsout_cfg_v1(db: DbSession, brand: Brand) -> dict | None:
     return row.value if (row and isinstance(row.value, dict)) else None
 
 
+def build_checklists_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_checklists_v1` — the owner's crew checklist templates. None until the owner has
+    saved them (the crew tools keep their own built-in defaults meanwhile)."""
+    row = db.scalar(select(BrandSetting).where(
+        BrandSetting.brand == brand, BrandSetting.key == "ij_checklists_v1"))
+    return row.value if (row and isinstance(row.value, dict)) else None
+
+
 def build_reviews_v1(db: DbSession, brand: Brand) -> list:
     """`ij_reviews_v1` — the follow-up-reviews list (verbatim records). Returns [] (NOT None)
     even when empty, so the injected empty array suppresses the prototype's demo-seed write
@@ -484,6 +492,7 @@ _BUILDERS = {
     "ij_breaks_v1": build_breaks_v1,
     "ij_daynotes_v1": build_daynotes_v1,
     "ij_binsout_cfg_v1": build_binsout_cfg_v1,
+    "ij_checklists_v1": build_checklists_v1,
     "ij_reviews_v1": build_reviews_v1,
     "ij_usage_v1": build_usage_v1,
     "ij_maint_v2": build_maint_v2,

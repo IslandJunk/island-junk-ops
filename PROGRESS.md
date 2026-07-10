@@ -158,6 +158,12 @@ Victoria↔Nanaimo switch is now THE workspace switch: everything the owner sees
   Nanaimo has no calendar yet — integration phase). Multi-tab: a stale page still syncs to the brand IT was served with
   (that's the safe behavior); reads use the session brand.
 
+**Operational tail — crew checklist templates** (no migration — generic `brand_setting`): `ij_checklists_v1` (the
+owner/manager-configurable walk-around + clock-out checklists per crew type) now persists via `apply_checklists`
+(owner/manager-guarded — a non-manager crew sync is rejected, verified) and injects on the owner-hub editor + the
+truck-hub / day-board / yard-processing consumers, so **the owner's checklist edits actually reach the crew tools**
+(before, they read their own built-in defaults). None-until-customized.
+
 **Operational tail — hands-on truck pre-check** — migration `70f23a968aa0`: **`precheck_log`** (`ij_precheck_v1`, one row
 per brand+truck+date; who/when/flagged + items JSONB). The parallel to the bin driver's walk-around (which rides in
 `bin_driver_day`); flagged items already raise `ij_fixes_v1` defect flags — this keeps the full inspection record.
@@ -232,17 +238,18 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    via `ij_clock_log`, and the handoff is ephemeral per-device state.
    - **Punch-time calendar mirror — DONE** (calendar shared + wired + verified; see the DONE section). Open: confirm
      per-day (chosen) vs per-punch with Wes; add a per-brand Nanaimo punch calendar when Nanaimo goes live.
-2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Done this session: reviews +
-   usage + **precheck**. Remaining user-authored keys worth persisting (skip device-local/ephemeral ones):
-   **`ij_stock_v1`** (supplies stock levels — pairs with usage; note: its "seed" is the real consumable catalog with demo
-   quantities, so persist the `{items}` doc but expect the catalog to carry through), **`ij_po_needed_v1`** (PM PO#s —
-   DEFERRED for a seed-guard: its demo is gated by `ij_po_seeded_v1`, so injecting `[]` won't suppress it; inject the guard
-   flag or skip the seed in the handler), **`ij_yard_clock_v1`/`ij_yard_workers_v1`** (yard self-clock — hours-adjacent;
-   check overlap vs `ij_clock_log` first), **`ij_checklists_v1`**, **`ij_bin_notes_v1`/`ij_bin_done_v1`**, **`ij_swing_log_v1`**.
-   Same model→migration→handler→ref pattern. **Intentionally NOT persisted** (device-local/ephemeral or already covered):
+2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Done this session: reviews,
+   usage, **precheck**, **checklists** (+ fleet/colour-map in the brand-switching arc). Remaining worth persisting:
+   **`ij_stock_v1`** (supplies stock levels — needs a **seeded catalog**: its `BASE`/`NEWITEMS` are the REAL consumables
+   list, not demo, so it's a "seed the catalog + persist onHand per item" feature like disposal, not a plain sync; the
+   important flow — used/restock deltas — is already captured in `ij_usage_v1`), **`ij_po_needed_v1`** (PM PO#s — needs a
+   seed-guard: its demo is gated by `ij_po_seeded_v1`; inject that flag truthy or skip the sample in the handler; owner
+   creates POs via `poSavePO`), **`ij_swing_log_v1`** (swing-board activity log — append), **`ij_bin_notes_v1`/`ij_bin_done_v1`**
+   (bin-driver per-bin notes/done). **Intentionally NOT persisted** (device-local/ephemeral or already covered):
    `ij_active_day_v1`, `ij_session_v1`, `*_seeded*` guards, `ij_resume_*` drafts, `ij_*_collapsed/open` UI state,
-   `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` (clock is authoritative via `ij_clock_log`), `ij_signin_log_v1`
-   (the `AuthSession` table is already the authoritative sign-in record).
+   `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` + **`ij_yard_clock_v1`** (both feed the authoritative
+   `ij_clock_log`, which now also mirrors to the punch calendar — the yard clock-out already pushes into `ij_clock_log`),
+   `ij_signin_log_v1` (the `AuthSession` table is the authoritative sign-in record).
 3. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
    payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number. **Punch-time

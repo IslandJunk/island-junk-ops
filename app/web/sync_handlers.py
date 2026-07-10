@@ -715,6 +715,18 @@ def apply_binsout_cfg(db: DbSession, brand: Brand, data, actor: Employee) -> dic
     return _apply_setting(db, brand, "ij_binsout_cfg_v1", data)
 
 
+def apply_checklists(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_checklists_v1` — the owner/manager-configurable crew checklist TEMPLATES
+    (walk-around + clock-out, per crew type). `{walk:{hand,bin}, clockout:{hand,bin,yard}}`,
+    each a list of `{id,t,d}`. Owner/manager only (crew tools read but must not overwrite the
+    template). Stored verbatim so the truck-hub / day-board / yard read the owner's edits."""
+    if not (is_owner(actor) or "manager" in (actor.access or [])):
+        return {"error": "forbidden — manager/owner only"}
+    if not isinstance(data, dict) or not data:
+        return {"saved": False}
+    return _apply_setting(db, brand, "ij_checklists_v1", data)
+
+
 def apply_reviews(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """`ij_reviews_v1` — the §11 follow-up-reviews list. Upsert by `id`; upsert-only (a
     review record is a permanent 'who to ask' log, never delete-by-absence)."""
@@ -1299,6 +1311,7 @@ HANDLERS = {
     "ij_breaks_v1": apply_breaks,
     "ij_daynotes_v1": apply_daynotes,
     "ij_binsout_cfg_v1": apply_binsout_cfg,
+    "ij_checklists_v1": apply_checklists,
     "ij_reviews_v1": apply_reviews,
     "ij_usage_v1": apply_usage,
     "ij_precheck_v1": apply_precheck,
