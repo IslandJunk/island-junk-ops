@@ -97,8 +97,14 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 3. NEXT (in order)
 
-1. **Verify in a browser** — booking lanes 3–7, the yard `#wDone` click, and now the maintenance-hub / reminders /
-   truck-hub screens reading + writing real data (the sync round-trips are proven at the API layer, not yet clicked through).
+1. **Browser verification — mostly DONE (2026-07):** clicked through the real app: **login** (PIN → `/auth/login` →
+   access-gated launcher ✓), **reminders** (typed → sync-bridge → Postgres → survives reload ✓), **yard-processing full
+   `#wDone`** (bin 12-09: crew/truck/weigh/class/streams → `/yard-processing` → Postgres → disposal margin $342 ✓ — the
+   flagged-untested flow), **maintenance hub** (loads fleet + due-status ✓), **booking** (2,173+824 real customers in
+   autocomplete; **Bins lane** renders drop/pickup + size + the real colour→truck map ✓; validation enforces required
+   fields). All test rows cleaned up. **Not forced:** a full multi-field booking *completion* for lanes 3–7 through the UI
+   (expects a selected QB customer + more) — the write path itself is proven (API + Collect/Invoiced lanes). Owner tile
+   shows Manager Hub 🔒 LOCKED (owner lacks `manager` flag — decide if owner = all-access).
 2. **Integrations** — first outbound: Twilio booking-confirmation text OR a Square payment link on the job
    (see `island-junk-SPEC-sms-and-texting.md` for the shared send-only updates line). Then the **off-board Google
    reminder-calendar mirror** for CC-charge reminders (write-only to a dedicated reminder calendar — needs its id, §4).
