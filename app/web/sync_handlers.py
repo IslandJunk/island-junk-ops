@@ -22,13 +22,14 @@ from app.models.attendance import Attendance, BreakLog
 from app.models.bin_field import BinDriverDay, BinWeigh, ToolDailyLog
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
+from app.models.colour_map import ColourMap
 from app.models.dayboard import DayboardOverlay
 from app.models.contract import Contract
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
 from app.models.enums import (
-    BinStatus, Brand, ContractPricing, CustomerSource, DisposalRole, OWNER_ONLY_GRANTABLE,
-    PayType, ReminderKind,
+    BinStatus, Brand, ColourKind, ContractPricing, CustomerSource, DisposalRole,
+    OWNER_ONLY_GRANTABLE, PayType, ReminderKind,
 )
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
@@ -37,6 +38,7 @@ from app.models.ops import FollowupReview, PrecheckLog, UsageEvent
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
 from app.models.reminder import Reminder
 from app.models.settings import BrandSetting, DayNote
+from app.models.truck import Truck
 from app.models.weigh import WeighLog
 from app.models.yard_processing import YardProcessing
 
@@ -234,6 +236,68 @@ def apply_employees(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
             updated += 1
     db.commit()
     return {"added": added, "updated": updated, "note": "PINs unchanged; removal = active:false"}
+
+
+def apply_fleet(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_fleet_v1` = {num: {mgr}} — the dispatch-truck roster (manager/owner-editable, §6).
+    Upsert Truck by (brand, num) with its lead; a truck removed from a present, non-empty
+    object is **soft-removed** (active=False) so its history + past assignments survive (§7)."""
+    if not (is_owner(actor) or "manager" in (actor.access or [])):
+        return {"error": "forbidden — manager/owner only"}
+    if not isinstance(data, dict) or not data:
+        return {"upserted": 0}
+    seen, n = set(), 0
+    for num, rec in data.items():
+        num = str(num).strip()
+        if not num:
+            continue
+        seen.add(num)
+        lead = (rec.get("mgr") if isinstance(rec, dict) else None) or None
+        t = db.scalar(select(Truck).where(Truck.brand == brand, Truck.num == num))
+        if t is None:
+            t = Truck(brand=brand, num=num, lead=lead, active=True)
+            db.add(t)
+        else:
+            t.lead, t.active = lead, True
+        n += 1
+    removed = 0
+    for t in db.scalars(select(Truck).where(Truck.brand == brand, Truck.active.is_(True))).all():
+        if t.num not in seen:
+            t.active, removed = False, removed + 1
+    db.commit()
+    return {"upserted": n, "soft_removed": removed}
+
+
+def apply_colourmap(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_colourmap_v1` — the colour→truck map (manager/owner-editable, §6). Sets
+    `assigned_truck` on **assignable** colours ONLY; STATUS and UNASSIGNED (sage) colours are
+    NEVER touched — Make.com keys ad-conversion signals off the status colours (§5/§15), so a
+    map edit must never alter them. Unknown keys (owner-added custom colours) are skipped for
+    now — creating custom colour rows needs their hex/colorId (a focused follow-up)."""
+    if not (is_owner(actor) or "manager" in (actor.access or [])):
+        return {"error": "forbidden — manager/owner only"}
+    if not isinstance(data, dict):
+        return {"updated": 0}
+    assign = data.get("assign") if isinstance(data.get("assign"), dict) else {}
+    current = data.get("current") if isinstance(data.get("current"), dict) else {}
+    merged: dict[str, str] = {}
+    for k, v in current.items():
+        merged[str(k)] = (v.get("truck") if isinstance(v, dict) else v) or ""
+    for k, v in assign.items():   # `assign` wins where both present
+        merged[str(k)] = v or ""
+    updated = skipped = 0
+    for key, truck in merged.items():
+        key = key.strip()
+        if not key:
+            continue
+        row = db.scalar(select(ColourMap).where(ColourMap.brand == brand, ColourMap.key == key))
+        if row is None or row.kind != ColourKind.assignable:
+            skipped += 1   # unknown/custom, or a protected status/sage colour
+            continue
+        row.assigned_truck = (str(truck).strip() or None)
+        updated += 1
+    db.commit()
+    return {"updated": updated, "skipped_protected_or_custom": skipped}
 
 
 def apply_incidents(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
@@ -1187,6 +1251,8 @@ def apply_pm(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
 
 HANDLERS = {
     "ij_bins_v1": apply_bins,
+    "ij_fleet_v1": apply_fleet,
+    "ij_colourmap_v1": apply_colourmap,
     "ij_employees_v1": apply_employees,
     "ij_incidents_v1": apply_incidents,
     "ij_clock_log": apply_clock,

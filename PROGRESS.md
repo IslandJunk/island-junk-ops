@@ -121,6 +121,15 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
 per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
 Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
 
+**Trucks + colour→truck map now editable/persisted (§6)** — `apply_fleet` (`ij_fleet_v1` = `{num:{mgr}}`) upserts the
+dispatch-truck roster by (brand, num) with its lead; a truck dropped from a present non-empty set is **soft-removed**
+(`active=False`, history survives §7). `apply_colourmap` (`ij_colourmap_v1`) sets `assigned_truck` on **assignable**
+colours ONLY — **status + sage colours are never touched** (Make.com keys ad-conversion off the status colours, §5/§15).
+Verified: a payload trying to reassign flamingo(status) was skipped while banana(assignable) updated; both models already
+existed (no migration) and their builders already inject on the hubs, so this closes the §13 "people & trucks / bins &
+colour map" editing gap for **both** brands. (Follow-up: creating owner-added **custom** colour rows needs their hex/
+colorId — skipped for now, not lost.)
+
 **Global brand-switching — the Nanaimo keystone (§3, approved by Wes 2026-07)** — the owner-hub's existing
 Victoria↔Nanaimo switch is now THE workspace switch: everything the owner sees/edits follows it.
 - **`POST /auth/brand`** (owner-only) sets `session.active_brand`; **`app/api/deps.py`** gains `active_brand_for`
@@ -232,11 +241,11 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
    payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number. **Punch-time
    calendar mirror** rides here too (blocked on the calendar share above).
-4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced). Follow-ups
-   when Nanaimo has data: make **trucks (`ij_fleet_v1`) + colour map (`ij_colourmap_v1`) syncable** (currently read-only
-   refs — no handler — so §13's "people & trucks / bins & colour map" editing doesn't persist for *either* brand yet), and
-   respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar TBD).
-   Optional hardening: send the page brand from the day-board/other read fetches too (multi-tab read consistency).
+4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced).
+   **Trucks + colour map now syncable — DONE this session too** (`apply_fleet`/`apply_colourmap`, status colours protected).
+   Follow-ups: respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar
+   TBD); create owner-added **custom colour** rows on colour-map sync (needs hex/colorId); optional hardening — send the
+   page brand from the day-board/other read fetches too (multi-tab read consistency).
 5. **Nanaimo setup — now via EXISTING screens (Wes's call).** No dedicated "Set up this workspace" screen (no prototype +
    would invent UI). With brand-switching live, the owner switches to Nanaimo and uses the existing rate-sheet (has a
    "Copy Victoria's rate card" path via `apply_rates`), employee, bins, and customer-import screens. Blockers before it's
