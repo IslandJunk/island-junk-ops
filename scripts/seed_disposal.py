@@ -70,6 +70,9 @@ MATERIALS: list[tuple] = [
     ("Paints / chemicals", "Hartland", None, 25, "/crate", "Monthly permit. Min 1 crate ($25) if any present."),
     ("TVs / bulbs / electronics / batteries", "The Bottle Depot", 0, 0, "free pickup",
      "Customer item fees still apply (TV $5, etc.)."),
+    # Empty per-ton spots (Wes 2026-07) — set the charge in the rate sheet when ready.
+    ("Mixed drywall (≥31%)", "Yard sort", None, None, "/ton", "Set the per-ton charge in the rate sheet."),
+    ("Concrete/clay tile", "McNutts", None, None, "/ton", "Set the per-ton charge in the rate sheet."),
 ]
 
 

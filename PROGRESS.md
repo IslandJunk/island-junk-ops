@@ -151,8 +151,11 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   concrete→"Clean concrete" $41, metal→$0 (income), recycle→"Cardboard" $0. **Wood (Wes 2026-07):** clean = bare lumber
   $80/t; treated/dirty (painted/stained/treated) = $110/t. Kept clean $80 as the default since the yard form has one
   "wood %"; if mixed-load wood is usually treated, flip the map to $110, or split the stream clean-vs-treated (form change).
-- **Two waste-class picker labels have no priced material** — `Mixed drywall (≥31%)` and `Concrete/clay tile` aren't in
-  the 24-row registry, so loads under those can't be margin-costed. Add the missing material rows, or map them.
+- ~~**Two waste-class picker labels have no priced material**~~ **RESOLVED (2026-07, Wes):** `Mixed drywall (≥31%)` +
+  `Concrete/clay tile` seeded as materials with a **blank per-ton charge** (empty editable spots — Wes fills the price in
+  the rate sheet when ready). Registry now covers all 13 picker labels; margin resolves them (charge null until priced).
+  *(Yard-waste dump prices small/med/large $40/$75/$100 are already editable in the rate sheet's yard-waste rows; confirm
+  whether a distinct `min` row is wanted.)*
 - **QuickBooks export format — RESOLVED (2026-07):** Wes's real `Victoria Customers.xlsx` has **no Company column** (cols:
   Customer, Phone Numbers, Email, Full Name, Billing/Shipping Address). Handled via `infer_kind` (keyword/number/name-shape)
   + xlsx support + phone normalization; imported 2,173 residential / 824 company. Residual: a handful of tokenless
