@@ -9,7 +9,7 @@
 (function () {
   var SYNCED = {
     ij_bins_v1: 1, ij_employees_v1: 1, ij_incidents_v1: 1, ij_clock_log: 1, ij_jobs_v1: 1, ij_weighlog_v1: 1,
-    ij_maint_v2: 1, ij_fixes_v1: 1, ij_fixes_resolved_v1: 1, ij_reminders_v1: 1
+    ij_maint_v2: 1, ij_fixes_v1: 1, ij_fixes_resolved_v1: 1, ij_reminders_v1: 1, ij_rates_v1: 1
   };
   var timers = {};
   var orig = localStorage.setItem.bind(localStorage);

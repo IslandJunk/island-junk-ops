@@ -14,6 +14,14 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 1. DONE (whole build, verified)
 
+- **Reference-data write-back — RATE SHEET LIVE (2026-07):** the owner's rate-sheet edits now **persist to Postgres**
+  (was localStorage-only). `apply_rates` (`sync_handlers.py`, reverse of `build_rates_v1`, owner-only) writes rate_card
+  scalars + JSONB substructures and upserts disposal **facilities + materials** (resolves facility name→id, logs
+  `disposal_rate_history` on a cost/price change; owner-authoritative reconcile-deletes within a *present, non-empty* list,
+  guarded against partial writes). Wired via `ij_rates_v1` in `HANDLERS` + the sync-bridge whitelist. **Verified in-browser**
+  (edited "Mixed general" $275→$285 → Postgres → survived reload; owner-guard refuses non-owners; seed restored). *(Still in
+  the cluster: residential/company customer edits, PM tree, custom-customer contracts, area surcharges — NEXT.)*
+
 - **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
   recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.
 - **Foundation** — brand-tagged base/mixins, config, PIN auth + **owner-only guard** (logic layer). Real login on Render.

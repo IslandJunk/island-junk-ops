@@ -7,6 +7,7 @@ whole-array sync). Removal is explicit (`active: false` / a status), not by omis
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session as DbSession
@@ -16,10 +17,11 @@ from app.auth.security import hash_pin
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.employee import Employee
-from app.models.enums import BinStatus, Brand, OWNER_ONLY_GRANTABLE, PayType, ReminderKind
+from app.models.enums import BinStatus, Brand, DisposalRole, OWNER_ONLY_GRANTABLE, PayType, ReminderKind
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
+from app.models.rates import DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
 from app.models.reminder import Reminder
 from app.models.weigh import WeighLog
 from app.models.yard_processing import YardProcessing
@@ -384,6 +386,124 @@ def apply_reminders(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     return {"upserted": n, "closed": closed}
 
 
+def _dec(x) -> Decimal | None:
+    """Rate-sheet money cell -> Decimal, or None for a blank ('' / None)."""
+    if x in (None, ""):
+        return None
+    try:
+        return Decimal(str(x))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+# ij_rates_v1 scalar key -> RateCard money column
+_RATE_SCALARS = {
+    "labourRate": "labour_rate", "demoRate": "demo_rate", "crewExtraRate": "crew_extra_rate",
+    "recycleCharge": "recycle_charge", "diversionSurcharge": "diversion_surcharge",
+    "diversionReport": "diversion_report", "gstPct": "gst_pct", "cardFeePct": "card_fee_pct",
+}
+# ij_rates_v1 JSONB key -> RateCard column
+_RATE_JSONB = {
+    "parking": "parking", "travel": "travel", "residentialLoads": "residential_loads",
+    "commercialLoads": "commercial_loads", "residentialMin": "residential_min",
+    "commercialIncludedMin": "commercial_included_min", "items": "specials", "ppe": "ppe",
+    "bin": "bin_rates", "yardWaste": "yard_waste",
+}
+_ROLE = {r.value: r for r in DisposalRole}
+
+
+def _apply_facilities(db: DbSession, brand: Brand, facs) -> dict:
+    """Upsert disposal facilities by name; remove any not in a present, non-empty list."""
+    if not isinstance(facs, list) or not facs:
+        return {"skipped": "no facilities in payload"}
+    seen, added, updated = set(), 0, 0
+    for f in facs:
+        if not isinstance(f, dict) or not (f.get("name") or "").strip():
+            continue
+        name = f["name"].strip()
+        seen.add(name)
+        row = db.scalar(select(DisposalFacility).where(DisposalFacility.brand == brand, DisposalFacility.name == name))
+        role = _ROLE.get(f.get("role") or "cost", DisposalRole.cost)
+        if row is None:
+            db.add(DisposalFacility(brand=brand, name=name, role=role, note=(f.get("note") or None)))
+            added += 1
+        else:
+            row.role, row.note = role, (f.get("note") or None)
+            updated += 1
+    removed = 0
+    for row in db.scalars(select(DisposalFacility).where(DisposalFacility.brand == brand)).all():
+        if row.name not in seen:
+            db.delete(row)
+            removed += 1
+    return {"added": added, "updated": updated, "removed": removed}
+
+
+def _apply_materials(db: DbSession, brand: Brand, mats, actor: Employee) -> dict:
+    """Upsert disposal materials by `m` (resolve facility name -> id, log rate history on a
+    cost/price change); remove any not in a present, non-empty list."""
+    if not isinstance(mats, list) or not mats:
+        return {"skipped": "no materials in payload"}
+    fac_by_name = {f.name: f for f in db.scalars(select(DisposalFacility).where(DisposalFacility.brand == brand))}
+    seen, added, updated, hist = set(), 0, 0, 0
+    for m in mats:
+        if not isinstance(m, dict) or not (m.get("m") or "").strip():
+            continue
+        mm = m["m"].strip()
+        seen.add(mm)
+        fac = fac_by_name.get((m.get("fac") or "").strip())
+        cost, price = _dec(m.get("cost")), _dec(m.get("price"))
+        row = db.scalar(select(DisposalMaterial).where(DisposalMaterial.brand == brand, DisposalMaterial.m == mm))
+        changed = row is None or row.cost != cost or row.price != price
+        if row is None:
+            row = DisposalMaterial(brand=brand, m=mm)
+            db.add(row)
+            added += 1
+        else:
+            updated += 1
+        row.facility_id = fac.id if fac else None
+        row.cost, row.price, row.unit, row.note = cost, price, (m.get("unit") or None), (m.get("note") or None)
+        db.flush()
+        if changed:
+            db.add(DisposalRateHistory(brand=brand, material_id=row.id, m=mm, cost=cost, price=price,
+                                       unit=row.unit, changed_by=(actor.name if actor else None)))
+            hist += 1
+    removed = 0
+    for row in db.scalars(select(DisposalMaterial).where(DisposalMaterial.brand == brand)).all():
+        if row.m not in seen:
+            db.delete(row)
+            removed += 1
+    return {"added": added, "updated": updated, "removed": removed, "history": hist}
+
+
+def apply_rates(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Persist the rate sheet (`ij_rates_v1`) — the single source of truth for pricing.
+    Owner-only. Writes rate_card scalars + JSONB substructures and upserts disposal
+    facilities + materials. The owner is authoritative for facilities/materials: within a
+    *present, non-empty* list, items no longer in it are removed; an absent/empty list is
+    skipped (never 'delete all'). Custom-customer rate profiles (`data['customers']`) are
+    handled by the contracts write-back, not here."""
+    if not is_owner(actor):
+        return {"error": "forbidden — owner only"}
+    if not isinstance(data, dict):
+        return {"saved": False}
+    rc = db.scalar(select(RateCard).where(RateCard.brand == brand))
+    if rc is None:
+        rc = RateCard(brand=brand)
+        db.add(rc)
+    for k, col in _RATE_SCALARS.items():
+        if k in data:
+            v = _dec(data[k])
+            if v is not None:
+                setattr(rc, col, v)
+    for k, col in _RATE_JSONB.items():
+        if k in data and data[k] is not None:
+            setattr(rc, col, data[k])
+    facs = _apply_facilities(db, brand, data.get("facilities"))
+    mats = _apply_materials(db, brand, data.get("disposal"), actor)
+    db.commit()
+    return {"saved": True, "facilities": facs, "materials": mats}
+
+
 HANDLERS = {
     "ij_bins_v1": apply_bins,
     "ij_employees_v1": apply_employees,
@@ -395,4 +515,5 @@ HANDLERS = {
     "ij_fixes_v1": apply_fixes,
     "ij_fixes_resolved_v1": apply_fixes_resolved,
     "ij_reminders_v1": apply_reminders,
+    "ij_rates_v1": apply_rates,
 }
