@@ -14,6 +14,14 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 1. DONE (whole build, verified)
 
+- **Ready-to-invoice queue (§11) LIVE (2026-07):** `app/invoicing/service.py::invoice_queue` aggregates what's ready to
+  bill — completed commercial `field_job`s (status=done), processed yard bins (**with the disposal margin**), and roll-off
+  bins **overdue** (dropped 14+ days, not picked). Owner-only `GET /invoice-queue`. `owner-hub-bridge.js` replaces the
+  owner hub's hardcoded demo alerts ("Ready to invoice", "Bins to bill/overdue") with the real counts + real detail sheets
+  (the fake "unpaid invoices $1,840" is dropped — payment status lives in QuickBooks, not the app). **Never invoices or
+  charges** (guardrail §2). Browser-verified (commercial $1,840 + bin margin $342 shown; owner-gated; test data cleaned).
+  **Also fixed a serving bug:** `_serve_prototype` replaced *every* `</body>`, corrupting prototypes that embed `</body>`
+  inside JS export-template strings (the owner hub's print/PDF docs) — now injects before the **last** `</body>` only.
 - **Reference-data write-back — RATE SHEET LIVE (2026-07):** the owner's rate-sheet edits now **persist to Postgres**
   (was localStorage-only). `apply_rates` (`sync_handlers.py`, reverse of `build_rates_v1`, owner-only) writes rate_card
   scalars + JSONB substructures and upserts disposal **facilities + materials** (resolves facility name→id, logs

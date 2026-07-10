@@ -14,6 +14,7 @@ from app.api.booking import router as booking_router
 from app.api.customers import router as customers_router
 from app.api.day_board import router as day_board_router
 from app.api.disposal import router as disposal_router
+from app.api.invoicing import router as invoicing_router
 from app.api.reminders import router as reminders_router
 from app.api.sync import router as sync_router
 from app.api.yard import router as yard_router
@@ -28,6 +29,7 @@ app.include_router(booking_router)
 app.include_router(customers_router)
 app.include_router(day_board_router)
 app.include_router(disposal_router)
+app.include_router(invoicing_router)
 app.include_router(reminders_router)
 app.include_router(sync_router)
 app.include_router(yard_router)
@@ -48,7 +50,11 @@ def _serve_prototype(html_path: Path, db: DbSession, keys: list[str],
     tail = '<script src="/static/sync-bridge.js"></script>\n'
     if bridge:
         tail += f'<script src="/static/{bridge}"></script>\n'
-    html = html.replace("</body>", tail + "</body>")
+    # Inject before the LAST </body> only. Some prototypes embed "</body>" inside JS
+    # export-template strings (e.g. the owner hub's print/PDF docs); a replace-all would
+    # inject a <script> mid-string and break that whole script block.
+    idx = html.rfind("</body>")
+    html = (html[:idx] + tail + html[idx:]) if idx != -1 else (html + tail)
     return HTMLResponse(html)
 
 # Bridge scripts etc.
@@ -70,7 +76,7 @@ SCREENS: dict[str, dict] = {
     "bin-registry":    {"file": "island-junk-bin-registry-v6.html", "keys": ["ij_bins_v1"], "bridge": None},
     "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1"], "bridge": None},
     "commercial-form": {"file": "CREW-commercial-form-v22.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1"], "bridge": None},
-    "owner-hub":       {"file": "island-junk-owner-hub-v54.html",   "keys": _HUB_REFS, "bridge": None},
+    "owner-hub":       {"file": "island-junk-owner-hub-v54.html",   "keys": _HUB_REFS, "bridge": "owner-hub-bridge.js"},
     "manager-hub":     {"file": "island-junk-management-hub-v83.html", "keys": _HUB_REFS, "bridge": None},
     "truck-hub":       {"file": "island-junk-truck-hub-v54.html",   "keys": ["ij_employees_v1", "ij_fleet_v1", "ij_fixes_v1"], "bridge": None},
     "bin-tracker":     {"file": "island-junk-bin-tracker-v34.html", "keys": ["ij_bins_v1", "ij_fleet_v1"], "bridge": None},
