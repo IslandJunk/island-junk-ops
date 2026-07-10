@@ -54,7 +54,7 @@ def invoice_queue(db: DbSession, brand: Brand, today: date | None = None) -> dic
             YardProcessing.brand == brand, YardProcessing.processed.is_(True))):
         m = compute_load_margin(yp, materials)
         bins_ready.append({
-            "code": yp.code, "customer": yp.customer, "waste_class": yp.waste_class,
+            "code": yp.code, "customer": yp.customer, "address": yp.address, "waste_class": yp.waste_class,
             "processed_date": yp.processed_date.isoformat() if yp.processed_date else None,
             "charge": m["charge"], "our_cost": m["cost"], "margin": m["margin"],
             "recorded_dump_fee": m["recorded_dump_fee"],

@@ -16,6 +16,29 @@
     return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:9px">' + html + "</div>";
   }
 
+  // Residential-bin 48-hour e-transfer clock (§9/§11): the owner taps this when he SENDS a
+  // residential-bin invoice. Fires POST /reminders/cc-charge (idempotent per customer+addr+day);
+  // the charge itself always stays manual (guardrail §2). The owner decides which bins are
+  // residential — the app only surfaces the action.
+  window.__ijStartCcClock = function (btn, customer, address) {
+    btn.disabled = true;
+    btn.textContent = "Starting…";
+    fetch("/reminders/cc-charge", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: customer || null, addr: address || null }),
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (rem) {
+      if (rem && rem.due) {
+        btn.parentNode.innerHTML = '<div class="meta" style="margin-top:8px;color:#E8A317;font-weight:700">'
+          + "⏱ 48-hour clock started — e-transfer due " + esc(rem.due)
+          + " (else charge card on file +2.4%, manual).</div>";
+      } else {
+        btn.disabled = false;
+        btn.textContent = "Start 48-hour e-transfer clock";
+      }
+    }).catch(function () { btn.disabled = false; btn.textContent = "Start 48-hour e-transfer clock"; });
+  };
+
   function invoiceSheet(Q) {
     var r = Q.ready_to_invoice, rows = "";
     (r.commercial || []).forEach(function (x) {
@@ -25,11 +48,16 @@
         + (x.total != null ? ("total " + money(x.total)) : "set the total") + " — ready to invoice</div>");
     });
     (r.bins || []).forEach(function (x) {
+      var ccBtn = '<button class="btn2" style="margin-top:9px;font-size:12.5px;padding:7px 10px"'
+        + ' onclick="__ijStartCcClock(this,' + JSON.stringify(x.customer || "").replace(/"/g, "&quot;")
+        + ',' + JSON.stringify(x.address || "").replace(/"/g, "&quot;") + ')">'
+        + "Residential? Start 48-hour e-transfer clock</button>";
       rows += card('<b>Bin ' + esc(x.code) + "</b> · " + esc(x.customer || "")
         + (x.waste_class ? ('<br><span style="color:var(--muted);font-size:12.5px">' + esc(x.waste_class) + "</span>") : "")
         + '<div class="meta" style="margin-top:6px;color:#3CA03C;font-weight:700">'
         + (x.charge != null ? ("disposal " + money(x.charge)) : "priced by weight")
-        + (x.margin != null ? (" · margin " + money(x.margin)) : "") + " — ready to invoice</div>");
+        + (x.margin != null ? (" · margin " + money(x.margin)) : "") + " — ready to invoice</div>"
+        + ccBtn);
     });
     if (!rows) rows = '<div class="meta" style="margin-top:10px">Nothing ready right now.</div>';
     window.sheet("Ready to invoice",
