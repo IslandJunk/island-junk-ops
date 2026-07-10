@@ -23,8 +23,11 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   **Customer write-back LIVE too:** `apply_customers` (`ij_customers_v1`) + `apply_company_customers`
   (`ij_company_customers_v1`) upsert new/edited customers from booking + the commercial-account editor (dedupe on
   phone/email/co, department `accounts[]` persist, **upsert-only — never delete-by-absence** since the injected list is
-  thousands of rows). Verified (existing dedup, new added, accounts stick, cleaned up). *(Still in the cluster: PM tree,
-  custom-customer contracts, area surcharges — NEXT.)*
+  thousands of rows). **PM tree write-back LIVE too:** `apply_pm` (`ij_pm_db_v2`) upserts the company→group→building tree,
+  matching by DB-uuid id else by name so a re-sync (client uid *or* DB id) never duplicates — verified (nested create,
+  round-trip no-dup, edit adds one building, cascade cleanup). *(Still in the cluster: **custom-customer contracts**
+  (Saanich/Oak Bay — `ij_contracts_v1` + rate-sheet `customers[]` → `contract` table) and **area surcharges** (seed
+  Victoria bin surcharges + write-back) — NEXT.)*
 
 - **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
   recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.

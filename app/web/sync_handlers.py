@@ -6,6 +6,7 @@ whole-array sync). Removal is explicit (`active: false` / a status), not by omis
 """
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 
@@ -17,7 +18,7 @@ from app.auth.security import hash_pin
 from app.customers.qb_import import company_key, residential_key
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
-from app.models.customer import CompanyCustomer, ResidentialCustomer
+from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
 from app.models.enums import (
     BinStatus, Brand, CustomerSource, DisposalRole, OWNER_ONLY_GRANTABLE, PayType, ReminderKind,
@@ -586,6 +587,77 @@ def apply_company_customers(db: DbSession, brand: Brand, data, actor: Employee) 
     return {"added": added, "matched": updated, "note": "upsert-only (no deletes)"}
 
 
+def _as_uuid(x) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(x))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def apply_pm(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert the property-management tree (`ij_pm_db_v2`): companies → groups → buildings.
+    Matches an existing row by its DB-uuid id (emitted by `build_pm_db_v2`) else by name, so
+    a re-sync before reload never duplicates. Upsert-only (no deletes)."""
+    if not isinstance(data, list):
+        return {"companies_added": 0}
+    nc = ng = nb = 0
+    for co in data:
+        if not isinstance(co, dict) or not (co.get("nm") or "").strip():
+            continue
+        nm = co["nm"].strip()
+        cid = _as_uuid(co.get("id"))
+        company = db.scalar(select(PmCompany).where(PmCompany.brand == brand, PmCompany.id == cid)) if cid else None
+        if company is None:
+            company = db.scalar(select(PmCompany).where(PmCompany.brand == brand, PmCompany.nm == nm))
+        if company is None:
+            company = PmCompany(brand=brand, nm=nm)
+            db.add(company)
+            nc += 1
+        company.addr = co.get("addr") or None
+        company.email = co.get("email") or None
+        company.contact = co.get("contact") or None
+        company.phone = co.get("phone") or None
+        db.flush()
+        for g in (co.get("groups") or []):
+            if not isinstance(g, dict):
+                continue
+            gnm = (g.get("nm") or "").strip()
+            gid = _as_uuid(g.get("id"))
+            group = db.scalar(select(PmGroup).where(PmGroup.brand == brand, PmGroup.id == gid)) if gid else None
+            if group is None:
+                group = db.scalar(select(PmGroup).where(
+                    PmGroup.brand == brand, PmGroup.company_id == company.id, PmGroup.nm == gnm))
+            if group is None:
+                group = PmGroup(brand=brand, company_id=company.id, nm=gnm)
+                db.add(group)
+                ng += 1
+            else:
+                group.nm = gnm
+            db.flush()
+            for b in (g.get("bldgs") or []):
+                if not isinstance(b, dict):
+                    continue
+                bname, baddr = (b.get("n") or "").strip(), (b.get("a") or "").strip()
+                if not (bname or baddr):
+                    continue
+                bid = _as_uuid(b.get("id"))
+                bldg = db.scalar(select(PmBuilding).where(PmBuilding.brand == brand, PmBuilding.id == bid)) if bid else None
+                if bldg is None:
+                    bldg = db.scalar(select(PmBuilding).where(
+                        PmBuilding.brand == brand, PmBuilding.group_id == group.id,
+                        PmBuilding.name == (bname or None), PmBuilding.address == (baddr or None)))
+                if bldg is None:
+                    bldg = PmBuilding(brand=brand, group_id=group.id)
+                    db.add(bldg)
+                    nb += 1
+                bldg.name, bldg.address = bname or None, baddr or None
+                bldg.email = b.get("email") or None
+                bldg.contact = b.get("contact") or None
+                bldg.phone = b.get("phone") or None
+    db.commit()
+    return {"companies_added": nc, "groups_added": ng, "buildings_added": nb}
+
+
 HANDLERS = {
     "ij_bins_v1": apply_bins,
     "ij_employees_v1": apply_employees,
@@ -600,4 +672,5 @@ HANDLERS = {
     "ij_rates_v1": apply_rates,
     "ij_customers_v1": apply_customers,
     "ij_company_customers_v1": apply_company_customers,
+    "ij_pm_db_v2": apply_pm,
 }
