@@ -14,7 +14,7 @@
     ij_binday_v1: 1, ij_tares_v1: 1, ij_weighins_v1: 1, ij_tooldaily_v1: 1,
     ij_dayboard_status_v1: 1, ij_dayboard_notes_v1: 1, ij_dayboard_sitelog_v1: 1,
     ij_attendance_v1: 1, ij_breaks_v1: 1, ij_daynotes_v1: 1, ij_binsout_cfg_v1: 1,
-    ij_reviews_v1: 1, ij_usage_v1: 1
+    ij_reviews_v1: 1, ij_usage_v1: 1, ij_precheck_v1: 1
   };
   var timers = {};
   var orig = localStorage.setItem.bind(localStorage);

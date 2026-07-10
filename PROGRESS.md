@@ -39,7 +39,7 @@ attendance), the external integrations (Twilio/Square/Dropbox — need creds), a
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree, Alembic head **`e7b266ed5ed6`**
+**Repo state:** clean working tree, Alembic head **`70f23a968aa0`**
 (migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
 PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
 restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
@@ -121,6 +121,11 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
 per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
 Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
 
+**Operational tail — hands-on truck pre-check** — migration `70f23a968aa0`: **`precheck_log`** (`ij_precheck_v1`, one row
+per brand+truck+date; who/when/flagged + items JSONB). The parallel to the bin driver's walk-around (which rides in
+`bin_driver_day`); flagged items already raise `ij_fixes_v1` defect flags — this keeps the full inspection record.
+**Write-only** (in SYNCED, not injected — a shared tablet mustn't restore another crew's check). Round-trip verified.
+
 **Operational tail (slice 1) — reviews + consumables usage** — migration `e7b266ed5ed6`:
 - **`followup_review`** (`ij_reviews_v1`, §11 follow-up-reviews tool) — upsert by `id`, verbatim doc + name/sent/skipped
   lifted. **`usage_event`** (`ij_usage_v1`) — append-only consumables ledger, deduped by (item, timestamp, type) both
@@ -195,16 +200,17 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
      yet). Then wire `google_punch_calendar_id` into config + a `_assert_punch_calendar` guard (live dispatch calendars
      stay hard-refused) + a graceful `punch_calendar_accessible()` skip (mirror the CC-charge reminder pattern), and
      confirm with Wes whether he wants **one event per punch** or **one per-day hours event**.
-2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Slice 1 done this session
-   (reviews + usage). Remaining user-authored keys worth persisting (skip device-local/ephemeral ones):
-   **`ij_stock_v1`** (supplies stock levels — pairs with usage), **`ij_po_needed_v1`** (PM PO#s to chase — DEFERRED for a
-   seed-guard: its demo is gated by `ij_po_seeded_v1`, so injecting `[]` won't suppress it; inject the guard flag or skip
-   the seed in the handler), **`ij_precheck_v1`** (hands-on truck walk-around — parallel to the bin driver's, defect flags
-   already sync via `ij_fixes_v1`), **`ij_signin_log_v1`** (who signed in when), **`ij_yard_clock_v1`/`ij_yard_workers_v1`**
-   (yard self-clock — hours-adjacent), **`ij_checklists_v1`**, **`ij_bin_notes_v1`/`ij_bin_done_v1`**, **`ij_swing_log_v1`**.
-   Same model→migration→handler→ref pattern. **Intentionally NOT persisted** (device-local/ephemeral): `ij_active_day_v1`,
-   `ij_session_v1`, `*_seeded*` guards, `ij_resume_*` drafts, `ij_*_collapsed/open` UI state, `ij_weighin_skips`,
-   `ij_maint_snooze_v1`, `ij_punches_v1` (clock is authoritative via `ij_clock_log`).
+2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Done this session: reviews +
+   usage + **precheck**. Remaining user-authored keys worth persisting (skip device-local/ephemeral ones):
+   **`ij_stock_v1`** (supplies stock levels — pairs with usage; note: its "seed" is the real consumable catalog with demo
+   quantities, so persist the `{items}` doc but expect the catalog to carry through), **`ij_po_needed_v1`** (PM PO#s —
+   DEFERRED for a seed-guard: its demo is gated by `ij_po_seeded_v1`, so injecting `[]` won't suppress it; inject the guard
+   flag or skip the seed in the handler), **`ij_yard_clock_v1`/`ij_yard_workers_v1`** (yard self-clock — hours-adjacent;
+   check overlap vs `ij_clock_log` first), **`ij_checklists_v1`**, **`ij_bin_notes_v1`/`ij_bin_done_v1`**, **`ij_swing_log_v1`**.
+   Same model→migration→handler→ref pattern. **Intentionally NOT persisted** (device-local/ephemeral or already covered):
+   `ij_active_day_v1`, `ij_session_v1`, `*_seeded*` guards, `ij_resume_*` drafts, `ij_*_collapsed/open` UI state,
+   `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` (clock is authoritative via `ij_clock_log`), `ij_signin_log_v1`
+   (the `AuthSession` table is already the authoritative sign-in record).
 3. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
    payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number. **Punch-time

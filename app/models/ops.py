@@ -7,13 +7,19 @@ localStorage:
   querying. (NiceJob retired — this is the in-app replacement.)
 - **UsageEvent** (`ij_usage_v1`) — the consumables used/restock ledger (blades, bags, oil…).
   Append-only; deduped by (item, timestamp, type).
+- **PrecheckLog** (`ij_precheck_v1`) — the hands-on crew's morning truck walk-around, one row
+  per (brand, truck, date). The parallel to the bin driver's walk-around (stored in
+  `bin_driver_day`); flagged items already raise `ij_fixes_v1` defect flags — this keeps the
+  full inspection record.
 
 (PO-chase `ij_po_needed_v1` deferred — its demo seed is guarded by a separate
 `ij_po_seeded_v1` flag, so it needs seed-guard handling before it can sync cleanly.)
 """
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Integer, String, UniqueConstraint
+from datetime import date
+
+from sqlalchemy import Boolean, Date, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,3 +46,15 @@ class UsageEvent(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
     type: Mapped[str | None] = mapped_column(String(20), nullable=True)   # used | restock
     at_iso: Mapped[str] = mapped_column(String(40), nullable=False)       # source ISO timestamp
+
+
+class PrecheckLog(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
+    __tablename__ = "precheck_log"
+    __table_args__ = (UniqueConstraint("brand", "truck", "check_date", name="uq_precheck_brand_truck_date"),)
+
+    truck: Mapped[str] = mapped_column(String(60), nullable=False)
+    check_date: Mapped[date] = mapped_column(Date, nullable=False)
+    who: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    logged_when: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    flagged: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    items: Mapped[list] = mapped_column(JSONB, nullable=False)   # [{id,label,status,note}]
