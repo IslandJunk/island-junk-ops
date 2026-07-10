@@ -23,7 +23,7 @@ router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 
 class CcChargeIn(BaseModel):
-    drop_date: date
+    invoice_date: date | None = None   # when the invoice was sent; defaults to today
     job_id: uuid.UUID | None = None
     name: str | None = None
     addr: str | None = None
@@ -45,10 +45,12 @@ def _out(r: Reminder) -> dict:
 @router.post("/cc-charge")
 def create_cc_charge(body: CcChargeIn, db: DbSession = Depends(get_db),
                      emp: Employee = Depends(get_current_employee)) -> dict:
-    """Manually create a 48-hour CC-charge reminder (idempotent). Auto-created at booking
-    for residential-bin jobs; this covers completions that happen outside booking."""
+    """Start the 48-working-hour CC-charge clock for a residential bin — call this when you
+    SEND the invoice. `due = invoice_date + 2 working days`. Idempotent per job. The charge
+    itself stays manual (guardrail §2)."""
     brand = _owner_or_403(emp)
-    r = add_cc_charge_reminder(db, brand, drop_date=body.drop_date, job_id=body.job_id,
+    inv = body.invoice_date or date.today()
+    r = add_cc_charge_reminder(db, brand, invoice_date=inv, job_id=body.job_id,
                                name=body.name, addr=body.addr, by=emp.name, commit=True)
     return _out(r)
 

@@ -26,3 +26,11 @@ secrets/
 
 # Spike run output (may echo event data — keep out of git)
 spike/out/
+
+# ─────────────────────────────────────────────────────────────
+# CUSTOMER DATA — real PII, NEVER COMMIT (imported into Postgres, not git)
+# ─────────────────────────────────────────────────────────────
+# QuickBooks customer exports (names, phones, emails, addresses)
+*Customers*.xlsx
+*Customer*Contact*.xlsx
+*.csv

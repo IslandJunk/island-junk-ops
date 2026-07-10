@@ -3,16 +3,17 @@
 Preview by default (no writes); pass --apply to insert the new (non-duplicate) rows.
 Dedupe is on phone/email, so re-running the same export inserts nothing.
 
-    python -m scripts.import_customers path/to/customers.csv            # preview only
-    python -m scripts.import_customers path/to/customers.csv --apply    # write new rows
+    python -m scripts.import_customers "Victoria Customers.xlsx"          # preview only
+    python -m scripts.import_customers path/to/customers.csv --apply      # write new rows
     python -m scripts.import_customers path/to/customers.csv --brand nanaimo --apply
+
+Accepts .xlsx/.xls or .csv (a QuickBooks Customer Contact List export).
 """
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
-from app.customers.qb_import import apply_import, build_preview, parse_csv
+from app.customers.qb_import import apply_import, build_preview, parse_file
 from app.db.session import new_session
 from app.models.enums import Brand
 
@@ -24,8 +25,7 @@ def main() -> None:
     ap.add_argument("--apply", action="store_true", help="write new rows (default: preview only)")
     args = ap.parse_args()
 
-    text = Path(args.file).read_text(encoding="utf-8-sig")
-    rows = parse_csv(text)
+    rows = parse_file(args.file)
     brand = Brand(args.brand)
     print(f"Parsed {len(rows)} data rows from {args.file} (brand={brand.value}).")
 

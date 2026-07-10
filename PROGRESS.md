@@ -42,21 +42,24 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   **Reminders** (`ij_reminders_v1` → `reminder`): upsert-by-id + "done = removed from list" reconcile, scoped to
   app kinds so it never clobbers owner CC-charge rows. New sync handlers (`apply_maint/fixes/fixes_resolved/reminders`)
   + `sync-bridge.js` whitelist + refs (`build_maint_v2/fixes_v1/reminders_v1`) wired to the maintenance/reminders/truck
-  screens. **§9/§11 48-hour CC-charge reminder** (`app/reminders/service.py`): auto-created at booking for
-  `residential_bin` (due = drop+48h, `kind=cc_charge`, "CC? UNPAID (DATE)…manual"), owner-only queue
-  `GET /reminders?kind=cc_charge` + `POST /reminders/{id}/done` + manual `POST /reminders/cc-charge`. **The charge
-  stays manual** (guardrail §2). **Verified end-to-end** on Render (blob round-trip, flag add+resolve, reminder
-  reconcile leaving CC-charge intact, auto-create due=drop+48h, owner check-off, manager 403; all test rows deleted).
-- **QuickBooks customer import (§13) — core LIVE + tested.** `app/customers/qb_import.py` parses a **QuickBooks
-  Customer Contact List** CSV (skips the report preamble, BOM; **alias-mapped headers** cover QBO *and* Desktop
-  wordings; stitches split billing address). Classifies commercial vs residential (Company column ⇒ company; splits
-  `Last, First`/`First Last`), **dedupes on digits-only phone / email / name** vs the DB *and* within the batch, and
-  `apply_import` inserts only the new — **re-importing the same export inserts nothing.** Owner-only
-  `POST /customers/import/preview|apply` + `GET /customers/summary`; `scripts/import_customers.py <file> [--apply]`
-  CLI. `build_customers/company/pm` refs feed the booking screen. **Verified end-to-end** on Render (QBO + Desktop
-  samples: 3 residential + 2 company classified, cross-format phone dedupe, idempotent re-apply, refs shape-checked,
-  all test rows deleted). *Caveat:* header map is against the **standard** QB export — confirm vs Wes's real file;
-  PM tree isn't in a flat contact list (stays app-entered); demo `QB_CUST/QB_COMM` consts still coexist (see §2/§4).
+  screens. **§9/§11 CC-charge reminder** (`app/reminders/service.py`, refined with Wes): the 48-hour clock starts when the
+  owner **SENDS THE INVOICE** (after pickup, sometimes days later) — NOT at drop — and "48h" = **2 working days**
+  (`app/core/dates.py` skips weekends + BC stat holidays incl. Boxing Day + Truth & Reconciliation; Fri invoice → Tue).
+  Created via `POST /reminders/cc-charge` (`invoice_date` defaults to today) → `kind=cc_charge`, "CC? UNPAID (DATE)…manual";
+  owner queue `GET /reminders?kind=cc_charge` + `POST /reminders/{id}/done`. **The charge stays manual** (guardrail §2).
+  Booking no longer auto-creates it. **Verified** on Render (blob round-trip, flag add+resolve, reminder reconcile leaving
+  CC-charge intact, Fri-invoice→Tue-due, booking makes none, owner check-off, manager 403; all test rows deleted).
+- **QuickBooks customer import (§13) — DONE + Victoria data LIVE on Render (2026-07).** `app/customers/qb_import.py`
+  parses a **QuickBooks Customer Contact List** in **CSV or Excel** (`.xlsx` via openpyxl; skips the report preamble/BOM;
+  **alias-mapped headers**; stitches multi-line billing addresses; **normalizes the multi-number "Phone Numbers" cell to
+  the first number** + caps every field to its column length). **Classifier:** an explicit Company column wins; else
+  (Wes's real export has none) `infer_kind` — a company keyword/number/`&`/`c/o` ⇒ company, else a ≤3-word name ⇒ person,
+  longer ⇒ organisation (catches numbered cos, orgs-with-a-contact, and tokenless orgs). Dedupes on phone/email/name;
+  idempotent. Owner-only `POST /customers/import/preview|apply` + `GET /customers/summary`;
+  `scripts/import_customers.py "<file>" [--apply]`. **Wes's `Victoria Customers.xlsx` (3,002 rows) imported:
+  +2,173 residential, +824 company** (5 dup, 0 unusable); `build_customers/company/pm` refs now serve them to the
+  booking screen (verified). *(The .xlsx is git-ignored — the PII lives only in Postgres.)* Still open: demo
+  `QB_CUST/QB_COMM` consts coexist in the booking screen (see §2); PM tree isn't in a contact list (stays app-entered).
 - **Disposal cost model LIVE** — `scripts/seed_disposal.py` seeds Victoria's **7 facilities + 24 materials + 24
   rate-history rows** (from `island-junk-rate-sheet-v14.html`, idempotent, every material FK'd to a facility).
   `app/yard/disposal.py::compute_load_margin` turns a `yard_processing` load into a margin: customer charge =
@@ -71,12 +74,10 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 2. IN FLIGHT (loose ends, nothing mid-edit)
 
-- **QuickBooks import — real-file confirmation + demo suppression.** The importer works against the *standard*
-  QuickBooks Customer Contact List columns (alias-mapped). To lock it: drop Wes's **actual export** at a path and run
-  `python -m scripts.import_customers <file>` (preview) — if any column isn't recognised, add it to
-  `COLUMN_ALIASES` in `app/customers/qb_import.py` (one-line change). Also: the booking screen's hardcoded `QB_CUST`
+- **QuickBooks demo-const suppression.** Real customers are imported + served, but the booking screen's hardcoded `QB_CUST`
   (4 residential) + `QB_COMM` (5 commercial) demo **consts** still concat with the injected real data — fully
   retiring them needs a booking-screen/bridge edit (they're `const`, so a localStorage ref can't override them).
+  Low priority now that 2,997 real customers dominate the lists.
 - **Yard waste-class picker still hardcoded** — the disposal cost model is live, but the yard-processing screen's
   `WASTE_CLASSES` list (13 labels) is still a hardcoded array that *overlaps but ≠* `disposal_material.m` (24 rows).
   The compute reconciles the two via `WASTE_CLASS_ALIAS` + whitespace normalization, but two picker labels have **no
@@ -115,21 +116,22 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   distinctly; the full 24-colour set is needed to colour all of #3–7.
 - **Spec §4 `#3 truck` example** — reads like a typo for `Truck #3`; implemented the plain leading-`#` = note rule.
   Confirm (see `app/dispatch/calendar_read.py::is_manager_note`).
-- **Disposal stream→cost mapping** (`app/yard/disposal.py::STREAM_MATERIAL`) — the 6 yard-sort streams are costed
-  against chosen materials: junk→"General refuse (sorted)" $160, **wood→"Clean wood" $80** (could be "Treated/dirty
-  wood" $110 for C&D), drywall→"Drywall — clean/tested new" $415, concrete→"Clean concrete" $41, metal→$0 (income),
-  recycle→"Cardboard" $0. All editable via the rate sheet; **confirm wood especially** (clean vs dirty changes margins).
+- **Disposal stream→cost mapping** (`app/yard/disposal.py::STREAM_MATERIAL`) — streams costed at what we PAY at the
+  landfill: junk→"General refuse (sorted)" $160, **wood→"Clean wood" $80**, drywall→"Drywall — clean/tested new" $415,
+  concrete→"Clean concrete" $41, metal→$0 (income), recycle→"Cardboard" $0. **Wood (Wes 2026-07):** clean = bare lumber
+  $80/t; treated/dirty (painted/stained/treated) = $110/t. Kept clean $80 as the default since the yard form has one
+  "wood %"; if mixed-load wood is usually treated, flip the map to $110, or split the stream clean-vs-treated (form change).
 - **Two waste-class picker labels have no priced material** — `Mixed drywall (≥31%)` and `Concrete/clay tile` aren't in
   the 24-row registry, so loads under those can't be margin-costed. Add the missing material rows, or map them.
-- **QuickBooks export format** — importer built against the *standard* Customer Contact List columns (alias-mapped for
-  QBO + Desktop). **Provide a real export** to lock the mapping (any unrecognised header → add to `COLUMN_ALIASES`).
-  Also: businesses entered in QB with a **blank Company column** import as residential (a flat contact list can't tell)
-  — the preview's untick lets the owner catch these. Confirm this is acceptable.
-- **CC-charge reminder — two open points.** (a) The **off-board reminder calendar id** isn't set, so the reminder lives
-  only in the app's `reminder` store for now; the Google-calendar mirror (write-only) is deferred until the id exists.
-  (b) `due = drop + 48h` uses **plain calendar days** (weekend/stat handling like the bin billable-day rule isn't applied)
-  — confirm 48h means calendar hours. Also the auto-trigger fires **at booking** (planned drop date); if a real
-  "residential-bin dropped" completion event is added later, call `add_cc_charge_reminder` there instead/again.
+- **QuickBooks export format — RESOLVED (2026-07):** Wes's real `Victoria Customers.xlsx` has **no Company column** (cols:
+  Customer, Phone Numbers, Email, Full Name, Billing/Shipping Address). Handled via `infer_kind` (keyword/number/name-shape)
+  + xlsx support + phone normalization; imported 2,173 residential / 824 company. Residual: a handful of tokenless
+  businesses may land in residential — the owner can fix in-app. To re-classify wholesale later, clear `src='qb'` rows and
+  re-import (dedupe skips existing, so it won't reclassify in place).
+- **CC-charge reminder — RESOLVED w/ Wes (2026-07):** 48h = **2 working days** (skip weekends + BC stats; Fri invoice → Tue),
+  and the clock starts when the **invoice is sent** (not drop) → built as `POST /reminders/cc-charge`. **Still open:** the
+  **off-board Google reminder-calendar** — Wes chose "in-app queue is enough for now"; add the write-only calendar mirror at
+  go-live when its id exists. Also needs a UI hook (a "start 48h clock" button when the owner invoices a residential bin).
 - *Resolved this session (in docs/data-model.md):* Flamingo = residential unpaid (CC **or** e-transfer), status-only;
   bin truck = Graphite/Blueberry; Tomato→Flamingo lifecycle; 7 booking lanes; merged bin lifecycle enum; dispatch
   `truck` table separate from a future maintenance `vehicle` table.

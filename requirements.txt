@@ -11,6 +11,7 @@ python-multipart>=0.0.9 # form posts (login)
 itsdangerous>=2.2       # signed session cookies
 tzdata                  # zoneinfo tz database (Windows has none)
 httpx                   # required by starlette TestClient (dev/verify only)
+openpyxl                # read QuickBooks Excel (.xlsx) customer exports (§13 import)
 # Google Calendar (booking write + day-board read; TEST calendar only)
 google-api-python-client>=2.0
 google-auth>=2.0
