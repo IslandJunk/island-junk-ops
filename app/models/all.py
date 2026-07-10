@@ -27,6 +27,7 @@ from app.models import (  # noqa: F401
     reminder,
     session,
     settings,
+    sms,
     truck,
     weigh,
     yard_processing,

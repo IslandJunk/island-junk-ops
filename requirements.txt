@@ -16,3 +16,5 @@ openpyxl                # read QuickBooks Excel (.xlsx) customer exports (§13 i
 google-api-python-client>=2.0
 google-auth>=2.0
 google-auth-httplib2>=0.2
+# Twilio SMS (updates line; lazy-imported — only needed once creds are set, §10)
+twilio>=9.0

@@ -36,9 +36,28 @@ class Settings(BaseSettings):
         "c_1033bcf8590acc0d57229b30e59d0169c4211883dd51ad18acb15476cc0193aa@group.calendar.google.com"
     )
 
+    # ── Twilio SMS (island-junk-SPEC-sms-and-texting.md) ──────────────────────
+    # Secrets live in .env (git-ignored); absent until Wes provides them → the app
+    # runs in dry-run (composes + logs, never sends). Canadian local number, no A2P 10DLC.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    # The ONE shared, send-only updates line the app texts from (both brands). E.164.
+    twilio_updates_line: str | None = "+17789065865"   # 778-906-5865
+    # The manager's real two-way MAIN lines — the app NEVER sends from these; used only as
+    # the numbers the reply auto-router points recognised customers back to.
+    victoria_main_line: str = "+17789665865"           # 778-966-5865
+    nanaimo_main_line: str = "+17789775865"            # 778-977-5865
+    # Verify inbound Twilio webhook signatures when set (the request URL's public base).
+    twilio_validate_signatures: bool = False
+
     @property
     def is_db_configured(self) -> bool:
         return bool(self.database_url)
+
+    @property
+    def is_sms_configured(self) -> bool:
+        """True only when the app can actually SEND (account creds + the updates line)."""
+        return bool(self.twilio_account_sid and self.twilio_auth_token and self.twilio_updates_line)
 
 
 settings = Settings()

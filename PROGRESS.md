@@ -39,7 +39,7 @@ attendance), the external integrations (Twilio/Square/Dropbox — need creds), a
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree, Alembic head **`56b3b57eb7b6`**
+**Repo state:** clean working tree, Alembic head **`f209105d0be8`**
 (migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
 PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
 restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
@@ -120,6 +120,23 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
 "Residential? Start 48-hour e-transfer clock" button per processed bin; it fires `POST /reminders/cc-charge` (idempotent
 per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
 Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
+
+**Twilio SMS integration — BUILT (dry-run until creds), first of the integrations** (migration `f209105d0be8`:
+`sms_opt_out` + `sms_message`). Built to `island-junk-SPEC-sms-and-texting.md`, creds-gated exactly like the calendar —
+absent creds → **dry-run** (composes + logs, never sends), activates when Wes puts Twilio creds in `.env`.
+- **One shared send-only updates line `+17789065865`** (778-906-5865, both brands). `app/integrations/twilio_sms.py`
+  hard-refuses sending from the manager MAIN lines (Vic +17789665865 / Nan +17789775865, §2.6 never-list) — verified the
+  guard rejects a main-line sender. `twilio` is **lazy-imported** (not needed until creds), added to `requirements.txt`.
+- **Outbound templates** (`app/sms/messages.py`, pure/tested): booking confirm · on-our-way · next-customer ETA
+  (crew-entered) · reminder · residential completion (price + GST + e-transfer email + "put your address in the memo").
+  Every message **names its brand**; **no message ever contains a card number** (§5) — asserted in the test.
+- **Inbound reply routing** (`app/sms/routing.py` + `service.py`): STOP/HELP/START handled FIRST (opt-out honoured), else
+  the "unmonitored line" auto-reply pointing the customer to the RIGHT main line — recognised Victoria → 778-966-5865,
+  Nanaimo → 778-977-5865, unknown → both (matched by last-10-digits against the customer tables). Every message logged.
+- **Endpoints:** `POST /sms/inbound` (Twilio webhook → TwiML, optional signature validation), `POST /sms/send`
+  (owner/manager; composes server-side by `kind` so the brand/no-card rules can't be bypassed), `GET /sms/status`,
+  `GET /sms/log`. Verified end-to-end in dry-run (webhook TwiML, opt-out/opt-in, dry-run compose+log). **Square + Dropbox
+  are the remaining integrations.**
 
 **Punch-time calendar mirror — LIVE** (migration `a5abfdbdebfc` adds `clock_punch.gcal_event_id`) — Wes shared the
 "PUNCH TIME - TEST" calendar (`c_1033bcf8…`) with the service account (writer). `apply_clock` now mirrors each punch to
@@ -256,10 +273,13 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` + **`ij_yard_clock_v1`** (both feed the authoritative
    `ij_clock_log`, which now also mirrors to the punch calendar — the yard clock-out already pushes into `ij_clock_log`),
    `ij_signin_log_v1` (the `AuthSession` table is the authoritative sign-in record).
-3. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
-   crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
-   payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number. **Punch-time
-   calendar mirror** rides here too (blocked on the calendar share above).
+3. **Integrations** — **Twilio SMS BUILT** (dry-run until Wes adds creds to `.env`: `twilio_account_sid`,
+   `twilio_auth_token`; the updates line `+17789065865` is pre-set — change via `.env` if the real number differs; then
+   set the Twilio Messaging webhook to `POST <public-base>/sms/inbound` and optionally `twilio_validate_signatures=true`).
+   **Remaining:** **Square** (payment links on the job — surface only, never auto-charge §2) and **Dropbox** (auto-file
+   job photos per job, TEST folder first) — both need creds, same creds-gated pattern. Outbound SMS triggers still to wire
+   into the client flows (on-our-way / ETA / completion buttons call `POST /sms/send`); booking-confirm auto-send wired
+   server-side. No A2P 10DLC for the local CA number.
 4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced).
    **Trucks + colour map now syncable — DONE this session too** (`apply_fleet`/`apply_colourmap`, status colours protected).
    Follow-ups: respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar

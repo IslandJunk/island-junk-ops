@@ -38,6 +38,38 @@ def build_headline(time_start: time | None, time_end: time | None,
     return head
 
 
+def _friendly_time(t: time | None) -> str:
+    if t is None:
+        return ""
+    h = t.hour % 12 or 12
+    ap = "am" if t.hour < 12 else "pm"
+    return f"{h}:{t.minute:02d}{ap}" if t.minute else f"{h}{ap}"
+
+
+def _confirm_when(on_date: date, ts: time | None, te: time | None) -> str:
+    day = on_date.strftime("%a %b ") + str(on_date.day)
+    if ts and te:
+        return f"{day}, {_friendly_time(ts)}–{_friendly_time(te)}"
+    if ts:
+        return f"{day}, {_friendly_time(ts)}"
+    return day
+
+
+def _send_booking_confirmation(db: DbSession, job: Job, on_date: date) -> None:
+    """Text the customer a booking confirmation from the updates line (best-effort, dry-run
+    until Twilio creds). Never fails the booking — a texting error is swallowed."""
+    if not job.customer_phone:
+        return
+    try:
+        from app.sms import messages as sms_messages, service as sms_service
+        body = sms_messages.booking_confirmation(
+            job.brand, name=job.customer_name,
+            when=_confirm_when(on_date, job.time_start, job.time_end), address=job.address)
+        sms_service.send(db, brand=job.brand, to=job.customer_phone, body=body, kind="booking_confirm")
+    except Exception:
+        pass
+
+
 def _description(job: Job) -> str:
     lines = [f"{job.booking_lane.value.upper()} booking"]
     if job.customer_name:
@@ -88,4 +120,5 @@ def create_booking(
     # not at booking/drop — so it's created via POST /reminders/cc-charge at invoice time.
     db.commit()
     db.refresh(job)
+    _send_booking_confirmation(db, job, on_date)
     return job
