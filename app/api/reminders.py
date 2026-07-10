@@ -6,12 +6,12 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from app.api.deps import get_current_employee
+from app.api.deps import active_brand_for, get_current_employee
 from app.auth.guards import is_owner
 from app.db.session import get_db
 from app.models.employee import Employee
@@ -29,10 +29,10 @@ class CcChargeIn(BaseModel):
     addr: str | None = None
 
 
-def _owner_or_403(emp: Employee) -> Brand:
+def _owner_or_403(request: Request, emp: Employee) -> Brand:
     if not is_owner(emp):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner access required")
-    return emp.brand or Brand.victoria
+    return active_brand_for(request, emp)
 
 
 def _out(r: Reminder) -> dict:
@@ -43,12 +43,12 @@ def _out(r: Reminder) -> dict:
 
 
 @router.post("/cc-charge")
-def create_cc_charge(body: CcChargeIn, db: DbSession = Depends(get_db),
+def create_cc_charge(body: CcChargeIn, request: Request, db: DbSession = Depends(get_db),
                      emp: Employee = Depends(get_current_employee)) -> dict:
     """Start the 48-working-hour CC-charge clock for a residential bin — call this when you
     SEND the invoice. `due = invoice_date + 2 working days`. Idempotent per job. The charge
     itself stays manual (guardrail §2)."""
-    brand = _owner_or_403(emp)
+    brand = _owner_or_403(request, emp)
     inv = body.invoice_date or date.today()
     r = add_cc_charge_reminder(db, brand, invoice_date=inv, job_id=body.job_id,
                                name=body.name, addr=body.addr, by=emp.name, commit=True)
@@ -56,12 +56,12 @@ def create_cc_charge(body: CcChargeIn, db: DbSession = Depends(get_db),
 
 
 @router.get("")
-def list_reminders(kind: ReminderKind | None = None, include_done: bool = False,
+def list_reminders(request: Request, kind: ReminderKind | None = None, include_done: bool = False,
                    db: DbSession = Depends(get_db),
                    emp: Employee = Depends(get_current_employee)) -> dict:
     """List reminders for the owner (default: open only). Filter `kind=cc_charge` for the
     ready-to-charge queue."""
-    brand = _owner_or_403(emp)
+    brand = _owner_or_403(request, emp)
     q = select(Reminder).where(Reminder.brand == brand)
     if kind is not None:
         q = q.where(Reminder.kind == kind)
@@ -73,11 +73,11 @@ def list_reminders(kind: ReminderKind | None = None, include_done: bool = False,
 
 
 @router.post("/{source_id}/done")
-def mark_done(source_id: str, db: DbSession = Depends(get_db),
+def mark_done(source_id: str, request: Request, db: DbSession = Depends(get_db),
               emp: Employee = Depends(get_current_employee)) -> dict:
     """Owner checks off a reminder (e.g. the customer paid, or the card was charged manually).
     A paid CC-charge reminder turns its calendar event **purple** (best-effort)."""
-    brand = _owner_or_403(emp)
+    brand = _owner_or_403(request, emp)
     r = db.scalar(select(Reminder).where(Reminder.brand == brand, Reminder.source_id == source_id))
     if r is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"No reminder '{source_id}'")

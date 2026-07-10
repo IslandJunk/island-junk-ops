@@ -27,7 +27,8 @@
       fetch("/sync", {
         method: "POST", credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: key, value: value }),
+        // Tag the write with the brand this page was served with (never-mix, §15).
+        body: JSON.stringify({ key: key, value: value, brand: window.__IJ_BRAND || null }),
       }).catch(function () {});
     }, 400);
   };

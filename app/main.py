@@ -1,9 +1,10 @@
 """FastAPI entrypoint. Run: uvicorn app.main:app --reload"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DbSession
@@ -18,6 +19,7 @@ from app.api.invoicing import router as invoicing_router
 from app.api.reminders import router as reminders_router
 from app.api.sync import router as sync_router
 from app.api.yard import router as yard_router
+from app.api.deps import optional_brand
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.enums import Brand
@@ -44,7 +46,10 @@ def _serve_prototype(html_path: Path, db: DbSession, keys: list[str],
     """Serve an approved prototype (file untouched) with the requested real DB
     reference data injected early + (optionally) the screen's bridge appended."""
     html = html_path.read_text(encoding="utf-8")
-    boot = reference_bootstrap_script(db, brand, keys)
+    # Tell the page (and its sync bridge) which brand it was served with, so every write is
+    # tagged with the brand the user was actually looking at (never-mix, §15).
+    brand_marker = f"<script>window.__IJ_BRAND={json.dumps(brand.value)};</script>\n"
+    boot = brand_marker + reference_bootstrap_script(db, brand, keys)
     html = html.replace("</head>", boot + "\n</head>", 1) if "</head>" in html else boot + html
     # sync bridge on every page (persists synced-key writes); then the screen's own bridge.
     tail = '<script src="/static/sync-bridge.js"></script>\n'
@@ -98,21 +103,25 @@ SCREENS: dict[str, dict] = {
 
 @app.get("/app", response_class=HTMLResponse)
 @app.get("/app/", response_class=HTMLResponse)
-def main_hub(db: DbSession = Depends(get_db)) -> HTMLResponse:
+def main_hub(request: Request, db: DbSession = Depends(get_db)) -> HTMLResponse:
     """Main Hub — launcher + real PIN login (via main-hub-bridge.js)."""
-    return _serve_prototype(_MAIN_HUB_HTML, db, ["ij_employees_v1", "ij_clock_log"], bridge="main-hub-bridge.js")
+    brand = optional_brand(request, db)
+    return _serve_prototype(_MAIN_HUB_HTML, db, ["ij_employees_v1", "ij_clock_log"],
+                            bridge="main-hub-bridge.js", brand=brand)
 
 
 @app.get("/app/{slug}", response_class=HTMLResponse)
-def app_screen(slug: str, db: DbSession = Depends(get_db)) -> HTMLResponse:
-    """Serve any registered approved screen with its real DB refs + bridge."""
+def app_screen(slug: str, request: Request, db: DbSession = Depends(get_db)) -> HTMLResponse:
+    """Serve any registered approved screen with its real DB refs + bridge, scoped to the
+    signed-in user's active brand (owner-switchable; crew locked; default Victoria)."""
     scr = SCREENS.get(slug)
     if scr is None:
         raise HTTPException(status_code=404, detail=f"Unknown screen '{slug}'")
     path = _PROTOTYPES / scr["file"]
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Prototype missing: {scr['file']}")
-    return _serve_prototype(path, db, scr["keys"], bridge=scr["bridge"])
+    brand = optional_brand(request, db)
+    return _serve_prototype(path, db, scr["keys"], bridge=scr["bridge"], brand=brand)
 
 
 @app.get("/health")

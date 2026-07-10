@@ -79,6 +79,32 @@
       + '<button class="btn2" onclick="closeSheet()" style="margin-top:12px">Close</button>');
   }
 
+  // ── Global brand switch (§3) ──────────────────────────────────────────────
+  // The owner-hub's Victoria/Nanaimo switch is THE owner workspace switch (Wes 2026-07):
+  // everything the owner sees/edits follows it. Align the prototype's client `BRAND` to the
+  // brand the server served this page with, then make a switch persist server-side + reload
+  // so every screen (and every sync write) follows the new brand.
+  (function () {
+    var served = window.__IJ_BRAND;
+    if (served && typeof BRAND !== "undefined" && (served === "victoria" || served === "nanaimo")) {
+      if (BRAND !== served) { BRAND = served; }   // align; the gate/unlock render picks it up
+    }
+    if (typeof setBrand === "function") {
+      var _setBrand = setBrand;
+      window.setBrand = function (b) {
+        if (b === window.__IJ_BRAND) { return _setBrand(b); }   // already active — just re-render
+        // Persist the switch, THEN reload so the whole page (refs + client BRAND) re-serves
+        // for the new brand. Owner-only server-side; crew never reach this screen.
+        fetch("/auth/brand", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brand: b }),
+        }).then(function () { window.location.reload(); })
+          .catch(function () { _setBrand(b); });   // offline fallback: at least switch the view
+      };
+    }
+  })();
+
   fetch("/invoice-queue", { credentials: "same-origin" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (Q) {

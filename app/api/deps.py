@@ -45,6 +45,44 @@ def get_current_employee(request: Request, db: DbSession = Depends(get_db)) -> E
     return emp
 
 
+def active_brand_for(request: Request, emp: Employee) -> "Brand":
+    """The brand a signed-in user is currently working in: the owner follows the session's
+    switchable `active_brand`; crew are locked to their own brand. Defaults to Victoria.
+    (Brand-scoped reads/actions resolve here; the owner-only guard stays separate.)"""
+    from app.models.enums import Brand
+    sess = getattr(request.state, "session", None)
+    if is_owner(emp) and sess is not None and sess.active_brand is not None:
+        return sess.active_brand
+    return emp.brand or Brand.victoria
+
+
+def get_active_brand(request: Request, emp: Employee = Depends(get_current_employee)) -> "Brand":
+    """Dependency form of `active_brand_for` for endpoints that just need the working brand."""
+    return active_brand_for(request, emp)
+
+
+def optional_brand(request: Request, db: DbSession = Depends(get_db)) -> "Brand":
+    """Resolve the working brand for a SERVED PAGE without requiring auth: read the session
+    cookie if present (owner -> active_brand, crew -> their brand), else default Victoria.
+    Never raises — a logged-out visitor (the login screen) just gets Victoria."""
+    from app.models.enums import Brand
+    raw = request.cookies.get(COOKIE_NAME)
+    if not raw:
+        return Brand.victoria
+    session_id = _read_cookie(raw)
+    if session_id is None:
+        return Brand.victoria
+    sess = get_active_session(db, session_id)
+    if sess is None:
+        return Brand.victoria
+    emp = db.get(Employee, sess.employee_id)
+    if emp is None or not emp.active:
+        return Brand.victoria
+    if is_owner(emp) and sess.active_brand is not None:
+        return sess.active_brand
+    return emp.brand or Brand.victoria
+
+
 def require_manager(emp: Employee = Depends(get_current_employee)) -> Employee:
     """Gate for manager-only actions (e.g. booking). Owner always passes."""
     if not (is_owner(emp) or "manager" in (emp.access or [])):

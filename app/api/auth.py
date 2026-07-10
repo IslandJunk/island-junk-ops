@@ -63,3 +63,23 @@ def logout(request: Request, response: Response, db: DbSession = Depends(get_db)
 def me(request: Request, emp: Employee = Depends(get_current_employee)) -> EmployeeOut:
     sess = getattr(request.state, "session", None)
     return _to_out(emp, sess.active_brand if sess else None)
+
+
+class BrandIn(BaseModel):
+    brand: Brand
+
+
+@router.post("/brand", response_model=EmployeeOut)
+def set_active_brand(body: BrandIn, request: Request, db: DbSession = Depends(get_db),
+                     emp: Employee = Depends(get_current_employee)) -> EmployeeOut:
+    """Owner switches the workspace (§3): everything the owner sees/edits after this follows
+    the new brand. Owner-only — crew are locked to their brand (never switch). The switch
+    persists on the session; the next page load serves the new brand's data."""
+    if not is_owner(emp):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can switch workspace")
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No active session")
+    sess.active_brand = body.brand
+    db.commit()
+    return _to_out(emp, sess.active_brand)

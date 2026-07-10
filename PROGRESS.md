@@ -121,6 +121,23 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
 per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
 Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
 
+**Global brand-switching — the Nanaimo keystone (§3, approved by Wes 2026-07)** — the owner-hub's existing
+Victoria↔Nanaimo switch is now THE workspace switch: everything the owner sees/edits follows it.
+- **`POST /auth/brand`** (owner-only) sets `session.active_brand`; **`app/api/deps.py`** gains `active_brand_for`
+  (owner → session brand, crew → locked brand, default Victoria), `get_active_brand`, and `optional_brand` (resolves a
+  served page's brand without requiring auth). Serving (`app_screen`/`main_hub`) + owner reads (invoice-queue, disposal,
+  reminders, customers, yard) now resolve the active brand.
+- **Never-mix (§15) safeguard:** each served page is stamped `window.__IJ_BRAND`, and **`sync-bridge.js` sends that brand
+  with every write** — the sync endpoint writes to the *page's* brand for the owner, but **hard-forces crew to their own
+  brand** regardless of payload (a Victoria page can never write to Nanaimo). Verified: owner switch routes Nanaimo edits
+  to Nanaimo, Victoria untouched; a crew member sending `brand:nanaimo` was forced to Victoria; crew `POST /auth/brand` →
+  403. `owner-hub-bridge.js` aligns the prototype's client `BRAND` to the served brand and makes the switch persist +
+  reload so every screen follows. Browser-verified end-to-end + reversible.
+- **This unblocks Nanaimo setup via the existing approved screens** (rate-sheet, employees, bins, customers) — no new
+  "setup" screen needed (Wes's call). **Caveats:** the day-board + booking still resolve brand the old way (calendar-bound;
+  Nanaimo has no calendar yet — integration phase). Multi-tab: a stale page still syncs to the brand IT was served with
+  (that's the safe behavior); reads use the session brand.
+
 **Operational tail — hands-on truck pre-check** — migration `70f23a968aa0`: **`precheck_log`** (`ij_precheck_v1`, one row
 per brand+truck+date; who/when/flagged + items JSONB). The parallel to the bin driver's walk-around (which rides in
 `bin_driver_day`); flagged items already raise `ij_fixes_v1` defect flags — this keeps the full inspection record.
@@ -215,17 +232,16 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
    payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number. **Punch-time
    calendar mirror** rides here too (blocked on the calendar share above).
-4. **Global brand-switching (the real Nanaimo keystone — non-integration, proposed).** The session already carries
-   `active_brand` and the owner-hub prototype has a Victoria↔Nanaimo `setBrand` switch, but `app_screen`/`sync` still
-   hardcode Victoria. Wiring the existing switch to the backend (owner-only `POST /auth/brand` → serve/sync the active
-   brand; crew stay locked; default Victoria = zero change) lets Nanaimo be **set up via the existing approved screens**
-   (rate sheet, employees, bins, colour map), no new UI. HIGH-stakes (§15 never-mix) — do carefully + test. **One product
-   question for Wes:** should the owner-hub's brand switch BE the global switch (everything follows it, per §3), or stay
-   settings-local? Confirm before wiring.
-5. **Nanaimo "Set up this workspace" screen (§13) — DEFERRED.** No approved prototype exists (building it net-new violates
-   the port-only guardrail), it depends on the deferred integrations (calendar/Twilio/Dropbox/Square), and §14 sequences it
-   last. Once brand-switching (above) lands + integrations exist, most of §13 is reachable via existing screens; the
-   dedicated setup wrapper needs a prototype from Wes first.
+4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced). Follow-ups
+   when Nanaimo has data: make **trucks (`ij_fleet_v1`) + colour map (`ij_colourmap_v1`) syncable** (currently read-only
+   refs — no handler — so §13's "people & trucks / bins & colour map" editing doesn't persist for *either* brand yet), and
+   respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar TBD).
+   Optional hardening: send the page brand from the day-board/other read fetches too (multi-tab read consistency).
+5. **Nanaimo setup — now via EXISTING screens (Wes's call).** No dedicated "Set up this workspace" screen (no prototype +
+   would invent UI). With brand-switching live, the owner switches to Nanaimo and uses the existing rate-sheet (has a
+   "Copy Victoria's rate card" path via `apply_rates`), employee, bins, and customer-import screens. Blockers before it's
+   fully usable: the trucks/colour-map sync gap above, and the Nanaimo **calendar + Twilio + Dropbox + Square** (integration
+   phase). Nanaimo rate/customer/bin/employee data entry works today once switched.
 6. **Yard waste-class picker from the registry — DEFERRED (product decision).** The picker's `WASTE_CLASSES` is a curated
    13-item list whose wording differs from `disposal_material.m` (e.g. "Construction/demo" vs "Construction / demo";
    "Rubble" vs "Rubble (brick / tile / mortar)"), so a naive merge adds conceptual duplicates (13→~25). Needs a
@@ -288,6 +304,12 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
   with `checkfirst=True` + `create_type=False` on columns (see the `reminder_kind` migration).
 - **Owner is `brand=NULL`** (shared). Any brand-scoped employee lookup MUST include brand-null
   (`or_(brand==b, brand.is_(None))`) or you duplicate the owner.
+- **Brand resolution (post brand-switching): NEVER write `emp.brand or Brand.victoria` again.** Reads/actions resolve the
+  working brand via `app.api.deps.active_brand_for(request, emp)` (owner → `session.active_brand`, crew → locked
+  `emp.brand`); served pages via `optional_brand(request, db)`. **Writes (sync) use the PAGE's brand** (`body.brand` /
+  `window.__IJ_BRAND`), and the sync endpoint **hard-forces crew to `emp.brand`** — a page can never write another brand
+  for locked crew. New owner endpoints must thread `request` + use `active_brand_for`, not the old hardcode. (day-board +
+  booking are the two still on the old path — calendar-bound, intentionally deferred.)
 - **ORM registry:** `app/models/__init__.py` is intentionally EMPTY (avoids a base→types→enums cycle). Import
   `app.models.all` to register every model; `new_session()` + Alembic env + `app.main` already do.
 - **Python 3.14 (bleeding edge):** plain `uvicorn` (not `[standard]`), `psycopg[binary]`, `pbkdf2_sha256` (not bcrypt),
