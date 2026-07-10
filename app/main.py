@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session as DbSession
 import app.models.all  # noqa: F401  (register every model so cross-table FKs resolve at runtime)
 from app.api.auth import router as auth_router
 from app.api.booking import router as booking_router
+from app.api.customers import router as customers_router
 from app.api.day_board import router as day_board_router
+from app.api.disposal import router as disposal_router
 from app.api.sync import router as sync_router
 from app.api.yard import router as yard_router
 from app.core.config import settings
@@ -22,7 +24,9 @@ from app.web.refs import reference_bootstrap_script
 app = FastAPI(title=settings.app_name)
 app.include_router(auth_router)
 app.include_router(booking_router)
+app.include_router(customers_router)
 app.include_router(day_board_router)
+app.include_router(disposal_router)
 app.include_router(sync_router)
 app.include_router(yard_router)
 
@@ -53,12 +57,13 @@ if _PROTOTYPES.is_dir():
 
 
 _DISPATCH_REFS = ["ij_fleet_v1", "ij_colourmap_v1"]
+_CUSTOMER_REFS = ["ij_customers_v1", "ij_company_customers_v1", "ij_pm_db_v2"]
 _HUB_REFS = ["ij_employees_v1", "ij_fleet_v1", "ij_colourmap_v1", "ij_bins_v1"]
 
 # slug -> {file, refs keys injected from DB, optional bridge}. The Main Hub launcher
 # navigates here (its go() is remapped by main-hub-bridge.js).
 SCREENS: dict[str, dict] = {
-    "new-booking":     {"file": "island-junk-new-booking-v67.html", "keys": _DISPATCH_REFS, "bridge": "booking-bridge.js"},
+    "new-booking":     {"file": "island-junk-new-booking-v67.html", "keys": _DISPATCH_REFS + _CUSTOMER_REFS, "bridge": "booking-bridge.js"},
     "day-board":       {"file": "island-junk-day-board-v28.html",   "keys": _DISPATCH_REFS, "bridge": "day-board-bridge.js"},
     "bin-registry":    {"file": "island-junk-bin-registry-v6.html", "keys": ["ij_bins_v1"], "bridge": None},
     "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1"], "bridge": None},

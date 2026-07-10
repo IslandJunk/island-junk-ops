@@ -17,17 +17,23 @@ from sqlalchemy.orm import Session as DbSession
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
 from app.models.colour_map import ColourMap
+from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
 from app.models.enums import BinStatus, Brand, ColourKind, PayType
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
-from app.models.rates import RateCard
+from app.models.rates import DisposalFacility, DisposalMaterial, RateCard
 from app.models.truck import Truck
 from app.models.weigh import WeighLog
 
 
 def _f(x) -> float | None:
     return float(x) if x is not None else None
+
+
+def _money(x):
+    """Rate-sheet money cell: a number, or "" for a blank (the prototype's convention)."""
+    return float(x) if x is not None else ""
 
 # §6: bin-truck colours vs hand-load colours (the prototype categorises trucks by this).
 _BIN_COLOUR_KEYS = {"graphite", "blueberry"}
@@ -101,6 +107,9 @@ def build_rates_v1(db: DbSession, brand: Brand) -> dict | None:
     rc = db.scalar(select(RateCard).where(RateCard.brand == brand))
     if rc is None:
         return None
+    facs = db.scalars(select(DisposalFacility).where(DisposalFacility.brand == brand)).all()
+    fac_name = {f.id: f.name for f in facs}
+    mats = db.scalars(select(DisposalMaterial).where(DisposalMaterial.brand == brand)).all()
     return {
         "labourRate": _f(rc.labour_rate), "demoRate": _f(rc.demo_rate), "crewExtraRate": _f(rc.crew_extra_rate),
         "recycleCharge": _f(rc.recycle_charge), "diversionSurcharge": _f(rc.diversion_surcharge),
@@ -110,7 +119,10 @@ def build_rates_v1(db: DbSession, brand: Brand) -> dict | None:
         "residentialMin": rc.residential_min or {}, "commercialIncludedMin": rc.commercial_included_min or {},
         "items": rc.specials or [], "ppe": rc.ppe or [],
         "bin": rc.bin_rates or {}, "yardWaste": rc.yard_waste or {},
-        "facilities": [], "disposal": [], "customers": [],
+        "facilities": [{"name": f.name, "role": f.role.value, "note": f.note or ""} for f in facs],
+        "disposal": [{"m": m.m, "fac": fac_name.get(m.facility_id, ""), "cost": _money(m.cost),
+                      "price": _money(m.price), "unit": m.unit or "", "note": m.note or ""} for m in mats],
+        "customers": [],
     }
 
 
@@ -164,6 +176,51 @@ def build_weighlog_v1(db: DbSession, brand: Brand) -> list | None:
     } for r in rows]
 
 
+def build_customers_v1(db: DbSession, brand: Brand) -> list | None:
+    """`ij_customers_v1` (residential autofill). None until real customers exist.
+    NOTE: coexists with the booking screen's small hardcoded `QB_CUST` demo const —
+    fully retiring that demo needs a booking-screen edit (see PROGRESS)."""
+    rows = db.scalars(select(ResidentialCustomer).where(ResidentialCustomer.brand == brand)).all()
+    if not rows:
+        return None
+    return [{"first": r.first or "", "last": r.last or "", "phone": r.phone or "",
+             "email": r.email or "", "addr": r.addr or ""} for r in rows]
+
+
+def build_company_customers_v1(db: DbSession, brand: Brand) -> list | None:
+    """`ij_company_customers_v1` (commercial accounts). None until real rows exist."""
+    rows = db.scalars(select(CompanyCustomer).where(CompanyCustomer.brand == brand)).all()
+    if not rows:
+        return None
+    return [{"id": str(r.id), "co": r.co, "name": r.name or r.co, "addr": r.addr or "",
+             "contact": r.contact or "", "phone": r.phone or "", "email": r.email or "",
+             "accounts": list(r.accounts or []), "src": r.src.value} for r in rows]
+
+
+def build_pm_db_v2(db: DbSession, brand: Brand) -> list | None:
+    """`ij_pm_db_v2` — the 3-level PM tree (company -> group -> building). None until data."""
+    companies = db.scalars(select(PmCompany).where(PmCompany.brand == brand)).all()
+    if not companies:
+        return None
+    groups = db.scalars(select(PmGroup).where(PmGroup.brand == brand)).all()
+    buildings = db.scalars(select(PmBuilding).where(PmBuilding.brand == brand)).all()
+    b_by_group: dict = {}
+    for b in buildings:
+        b_by_group.setdefault(b.group_id, []).append(
+            {"id": str(b.id), "n": b.name or "", "a": b.address or "",
+             "email": b.email or "", "contact": b.contact or "", "phone": b.phone or ""})
+    g_by_co: dict = {}
+    for g in groups:
+        g_by_co.setdefault(g.company_id, []).append(
+            {"id": str(g.id), "nm": g.nm or "", "bldgs": b_by_group.get(g.id, [])})
+    out = []
+    for c in companies:
+        grps = g_by_co.get(c.id) or [{"id": str(c.id) + "-g", "nm": "", "bldgs": []}]
+        out.append({"id": str(c.id), "nm": c.nm, "addr": c.addr or "", "email": c.email or "",
+                    "contact": c.contact or "", "phone": c.phone or "", "src": c.src.value, "groups": grps})
+    return out
+
+
 _BUILDERS = {
     "ij_fleet_v1": build_fleet_v1,
     "ij_colourmap_v1": build_colourmap_v1,
@@ -174,6 +231,9 @@ _BUILDERS = {
     "ij_clock_log": build_clock_log_v1,
     "ij_jobs_v1": build_field_jobs_v1,
     "ij_weighlog_v1": build_weighlog_v1,
+    "ij_customers_v1": build_customers_v1,
+    "ij_company_customers_v1": build_company_customers_v1,
+    "ij_pm_db_v2": build_pm_db_v2,
 }
 
 

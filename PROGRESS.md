@@ -35,14 +35,42 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   + a dedicated yard endpoint: **bins, roster (owner-guarded), incidents, clock in/out, job completion (field_job),
   yard weigh, and the yard-processing rich record** (waste class, stream %, gross/tare/net, dump fee — the disposal
   cost-model input). All verified against Render.
+- **QuickBooks customer import (§13) — core LIVE + tested.** `app/customers/qb_import.py` parses a **QuickBooks
+  Customer Contact List** CSV (skips the report preamble, BOM; **alias-mapped headers** cover QBO *and* Desktop
+  wordings; stitches split billing address). Classifies commercial vs residential (Company column ⇒ company; splits
+  `Last, First`/`First Last`), **dedupes on digits-only phone / email / name** vs the DB *and* within the batch, and
+  `apply_import` inserts only the new — **re-importing the same export inserts nothing.** Owner-only
+  `POST /customers/import/preview|apply` + `GET /customers/summary`; `scripts/import_customers.py <file> [--apply]`
+  CLI. `build_customers/company/pm` refs feed the booking screen. **Verified end-to-end** on Render (QBO + Desktop
+  samples: 3 residential + 2 company classified, cross-format phone dedupe, idempotent re-apply, refs shape-checked,
+  all test rows deleted). *Caveat:* header map is against the **standard** QB export — confirm vs Wes's real file;
+  PM tree isn't in a flat contact list (stays app-entered); demo `QB_CUST/QB_COMM` consts still coexist (see §2/§4).
+- **Disposal cost model LIVE** — `scripts/seed_disposal.py` seeds Victoria's **7 facilities + 24 materials + 24
+  rate-history rows** (from `island-junk-rate-sheet-v14.html`, idempotent, every material FK'd to a facility).
+  `app/yard/disposal.py::compute_load_margin` turns a `yard_processing` load into a margin: customer charge =
+  headline `waste_class` price × net tonnage; our cost = the class's own `cost` × tonnage (pass-through) **or**
+  Σ(stream% × tonnage × stream cost) for a blank-cost Yard-sort class; margin = charge − cost. Costs pulled **live**
+  from the registry (edit a rate once → re-prices everywhere). `build_rates_v1` now emits the real facilities/disposal
+  into `ij_rates_v1`. Owner-only `GET /disposal/margins` reads it. **Verified end-to-end** on Render (POST yard load →
+  margins showed charge 550 / cost 208 / margin 342; streams + explicit + label-normalization + no-weight + unknown-class
+  paths all checked; test row deleted).
 
 ---
 
 ## 2. IN FLIGHT (loose ends, nothing mid-edit)
 
-- **Disposal margin math** — `yard_processing` records now persist, but `disposal_facility` + `disposal_material`
-  tables are **empty**. Need to seed the §9 facility/material list, then write the compute
-  (customer charge by waste class − Σ(stream% × stream cost)). Tables built; no data, no compute fn yet.
+- **QuickBooks import — real-file confirmation + demo suppression.** The importer works against the *standard*
+  QuickBooks Customer Contact List columns (alias-mapped). To lock it: drop Wes's **actual export** at a path and run
+  `python -m scripts.import_customers <file>` (preview) — if any column isn't recognised, add it to
+  `COLUMN_ALIASES` in `app/customers/qb_import.py` (one-line change). Also: the booking screen's hardcoded `QB_CUST`
+  (4 residential) + `QB_COMM` (5 commercial) demo **consts** still concat with the injected real data — fully
+  retiring them needs a booking-screen/bridge edit (they're `const`, so a localStorage ref can't override them).
+- **Yard waste-class picker still hardcoded** — the disposal cost model is live, but the yard-processing screen's
+  `WASTE_CLASSES` list (13 labels) is still a hardcoded array that *overlaps but ≠* `disposal_material.m` (24 rows).
+  The compute reconciles the two via `WASTE_CLASS_ALIAS` + whitespace normalization, but two picker labels have **no
+  registry material** (`Mixed drywall (≥31%)`, `Concrete/clay tile`) → a load booked under those returns
+  `cost_basis:"unknown"` with a warning. The proper fix (flagged in `docs/data-model.md`) is to drive the picker from
+  the materials registry so there's one source. Deferred — needs a careful yard-screen edit.
 - **Booking lanes 3–7** (bins, pm, contracts, custom, pallet) — wired by the *generic* bridge (keys off `curType`),
   but only Collect + Invoiced were browser-clicked. Should spot-check each lane's modal in a browser.
 - **Yard `#wDone` literal-click** — the save path (`/yard-processing`) is proven from the real page, but the crew/truck
@@ -53,14 +81,14 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 3. NEXT (in order)
 
-1. **Seed disposal facilities/materials (§9)** + build the margin compute on `yard_processing` → real disposal margins.
-2. **QuickBooks customer import (§13)** — upload the Customer Contact List export, preview+untick, dedupe on phone/email;
-   then `build_customers`/`build_company`/`build_pm` refs → customers/contracts screens go real.
-3. **Maintenance + reminders persistence** — build `maintenance` (`ij_maint_v2`) + `reminder` (`ij_reminders_v1`) tables
-   + sync handlers to finish write-coverage.
-4. **Verify booking lanes 3–7** + the yard `#wDone` click in a browser.
-5. **Integrations** — first outbound: Twilio booking-confirmation text OR a Square payment link on the job
+1. **Maintenance + reminders persistence** — build `maintenance` (`ij_maint_v2`) + `reminder` (`ij_reminders_v1`) tables
+   + sync handlers to finish write-coverage. Include the §9/§11 **48-hour residential-bin CC-charge reminder** (auto-create
+   on residential-bin completion, off-board reminder calendar, owner check-off — charge stays manual).
+2. **Verify booking lanes 3–7** + the yard `#wDone` click in a browser.
+3. **Integrations** — first outbound: Twilio booking-confirmation text OR a Square payment link on the job
    (see `island-junk-SPEC-sms-and-texting.md` for the shared send-only updates line).
+4. **Drive the yard waste-class picker from the disposal registry** (retire the hardcoded `WASTE_CLASSES` — see §2).
+5. **Confirm QB import vs Wes's real export** + retire the `QB_CUST/QB_COMM` demo consts (see §2).
 
 ---
 
@@ -76,6 +104,16 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   distinctly; the full 24-colour set is needed to colour all of #3–7.
 - **Spec §4 `#3 truck` example** — reads like a typo for `Truck #3`; implemented the plain leading-`#` = note rule.
   Confirm (see `app/dispatch/calendar_read.py::is_manager_note`).
+- **Disposal stream→cost mapping** (`app/yard/disposal.py::STREAM_MATERIAL`) — the 6 yard-sort streams are costed
+  against chosen materials: junk→"General refuse (sorted)" $160, **wood→"Clean wood" $80** (could be "Treated/dirty
+  wood" $110 for C&D), drywall→"Drywall — clean/tested new" $415, concrete→"Clean concrete" $41, metal→$0 (income),
+  recycle→"Cardboard" $0. All editable via the rate sheet; **confirm wood especially** (clean vs dirty changes margins).
+- **Two waste-class picker labels have no priced material** — `Mixed drywall (≥31%)` and `Concrete/clay tile` aren't in
+  the 24-row registry, so loads under those can't be margin-costed. Add the missing material rows, or map them.
+- **QuickBooks export format** — importer built against the *standard* Customer Contact List columns (alias-mapped for
+  QBO + Desktop). **Provide a real export** to lock the mapping (any unrecognised header → add to `COLUMN_ALIASES`).
+  Also: businesses entered in QB with a **blank Company column** import as residential (a flat contact list can't tell)
+  — the preview's untick lets the owner catch these. Confirm this is acceptable.
 - *Resolved this session (in docs/data-model.md):* Flamingo = residential unpaid (CC **or** e-transfer), status-only;
   bin truck = Graphite/Blueberry; Tomato→Flamingo lifecycle; 7 booking lanes; merged bin lifecycle enum; dispatch
   `truck` table separate from a future maintenance `vehicle` table.
@@ -126,6 +164,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 .venv/Scripts/python.exe -m scripts.seed_rates
 .venv/Scripts/python.exe -m scripts.seed_colours
 .venv/Scripts/python.exe -m scripts.seed_colour_trucks
+.venv/Scripts/python.exe -m scripts.seed_disposal
 # 5. run
 .venv/Scripts/python.exe -m uvicorn app.main:app                    # http://127.0.0.1:8000/app  (login) · /health
 ```
