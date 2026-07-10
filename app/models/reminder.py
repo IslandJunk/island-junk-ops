@@ -31,8 +31,10 @@ class Reminder(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     addr: Mapped[str | None] = mapped_column(String(255), nullable=True)
     draft: Mapped[dict | None] = mapped_column(JSONB, nullable=True)     # booking-draft payload (Resume booking)
-    # cc_charge only: the off-board reminder calendar it belongs on + the source job.
+    # cc_charge only: the off-board reminder calendar it belongs on + the source job +
+    # the mirrored Google Calendar event (recoloured purple / deleted when paid).
     calendar: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    gcal_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )

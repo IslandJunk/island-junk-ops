@@ -83,6 +83,7 @@ SCREENS: dict[str, dict] = {
     "reminders":       {"file": "island-junk-reminders-v1.html",   "keys": ["ij_reminders_v1"], "bridge": None},
     "swing-board":     {"file": "island-junk-swing-board-v5.html",  "keys": _DISPATCH_REFS, "bridge": None},
     "estimate-builder": {"file": "island-junk-estimate-builder-v4.html", "keys": [], "bridge": None},
+    "rate-sheet":      {"file": "island-junk-rate-sheet-v14.html", "keys": ["ij_rates_v1"], "bridge": None},
 }
 
 

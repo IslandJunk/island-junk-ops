@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     google_test_calendar_id: str | None = (
         "c_37fdece0f833b792c645b6d195f07c865611cd9de35a2a142620b768e6324f34@group.calendar.google.com"
     )
+    # Off-board CC-charge reminder calendar (§9/§11) — the ONLY other calendar the app
+    # may write to; reminders appear here and turn purple/deleted when paid (Wes 2026-07).
+    google_reminder_calendar_id: str | None = (
+        "c_139129e65b40062ead44d4aa680aa8c186c997fdcc9f8c8946a2fc6347f0b83c@group.calendar.google.com"
+    )
 
     @property
     def is_db_configured(self) -> bool:

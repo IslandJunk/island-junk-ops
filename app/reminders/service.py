@@ -53,7 +53,21 @@ def add_cc_charge_reminder(db: DbSession, brand: Brand, *, invoice_date: date,
     r = Reminder(brand=brand, source_id=sid, kind=ReminderKind.cc_charge, text=text, by=by,
                  due=due, name=name, addr=addr, job_id=job_id, calendar=CC_CHARGE_CALENDAR)
     db.add(r)
+    _mirror_to_calendar(r, due, who, text)   # best-effort; DB reminder saves regardless
     if commit:
         db.commit()
         db.refresh(r)
     return r
+
+
+def _mirror_to_calendar(reminder: Reminder, due: date, who: str, text: str) -> None:
+    """Create the reminder event on the off-board reminder calendar. Best-effort: if the
+    service account can't reach the calendar yet (not shared), the DB reminder still saves
+    and the event can be back-filled later. Never raises."""
+    try:
+        from app.integrations import gcal
+        reminder.gcal_event_id = gcal.create_reminder_event(
+            summary=f"CC? UNPAID — {who}", description=text,
+            on_date=due, color_id=gcal.CC_UNPAID_COLOR)
+    except Exception:
+        pass

@@ -17,7 +17,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 - **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
   recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.
 - **Foundation** — brand-tagged base/mixins, config, PIN auth + **owner-only guard** (logic layer). Real login on Render.
-- **30 tables** on Render via 9 Alembic migrations (+ maintenance_doc, defect_flag, reminder): employee, owner_security, device, auth_session,
+- **30 tables** on Render via 10 Alembic migrations (+ maintenance_doc, defect_flag, reminder[+gcal_event_id]): employee, owner_security, device, auth_session,
   colour_map, truck, truck_alert_pref, residential_customer, company_customer, pm_company/group/building,
   job, bin, rate_card, area_surcharge, surcharge_waiver, contract, disposal_facility, disposal_material,
   disposal_rate_history, incident, clock_punch, field_job, weigh_log, yard_processing.
@@ -68,7 +68,10 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   from the registry (edit a rate once → re-prices everywhere). `build_rates_v1` now emits the real facilities/disposal
   into `ij_rates_v1`. Owner-only `GET /disposal/margins` reads it. **Verified end-to-end** on Render (POST yard load →
   margins showed charge 550 / cost 208 / margin 342; streams + explicit + label-normalization + no-weight + unknown-class
-  paths all checked; test row deleted).
+  paths all checked; test row deleted). **Model confirmed w/ Wes (2026-07):** the **mixed** rates ($275 <50% wood /
+  $245 ≥50% wood) are what **we charge** at our yard (Yard-sort, blank cost); the clean/dirty wood ($80/$110) + all other
+  sorted rates are what **we pay** at the landfills. The `rate-sheet` screen (`island-junk-rate-sheet-v14.html`) is now
+  registered + served with the real `ij_rates_v1` so the owner sees/edits it live.
 
 ---
 
@@ -128,10 +131,14 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   + xlsx support + phone normalization; imported 2,173 residential / 824 company. Residual: a handful of tokenless
   businesses may land in residential — the owner can fix in-app. To re-classify wholesale later, clear `src='qb'` rows and
   re-import (dedupe skips existing, so it won't reclassify in place).
-- **CC-charge reminder — RESOLVED w/ Wes (2026-07):** 48h = **2 working days** (skip weekends + BC stats; Fri invoice → Tue),
-  and the clock starts when the **invoice is sent** (not drop) → built as `POST /reminders/cc-charge`. **Still open:** the
-  **off-board Google reminder-calendar** — Wes chose "in-app queue is enough for now"; add the write-only calendar mirror at
-  go-live when its id exists. Also needs a UI hook (a "start 48h clock" button when the owner invoices a residential bin).
+- **CC-charge reminder — BUILT incl. calendar mirror (2026-07):** 48h = 2 working days, invoice-triggered (above). The
+  **off-board Google reminder-calendar mirror is now built** — Wes provided the calendar id
+  (`c_139129…@group.calendar.google.com`, in `config.google_reminder_calendar_id`). A new CC-charge reminder creates an
+  all-day Flamingo event on the due date; marking it paid recolours it **purple/Grape** (`app/integrations/gcal.py`
+  `create/recolor/delete_reminder_event`, guarded to that calendar ONLY — dispatch + TEST calendars hard-refused).
+  **⚠ ACTION: the reminder calendar must be SHARED with the service account** `ij-calendar-spike@island-junk-spike.iam.gserviceaccount.com`
+  ("Make changes to events") — until then the mirror **skips gracefully** (reminder still saves in-DB, `gcal_event_id` null;
+  back-fill script TODO for any created while unshared). Still needs a UI "start 48h clock" button at invoice time.
 - *Resolved this session (in docs/data-model.md):* Flamingo = residential unpaid (CC **or** e-transfer), status-only;
   bin truck = Graphite/Blueberry; Tomato→Flamingo lifecycle; 7 booking lanes; merged bin lifecycle enum; dispatch
   `truck` table separate from a future maintenance `vehicle` table.
@@ -173,7 +180,7 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 # from repo root (Windows paths; .venv already exists)
 .venv/Scripts/python.exe -m pip install -r requirements.txt         # 1. deps
 .venv/Scripts/python.exe -c "import app.main; print('imports OK')"   # 2. sanity
-.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = 46d1bfdb249d)
+.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = 2a767c88c896)
 # 4. seed (fresh DB only, in this order):
 .venv/Scripts/python.exe -m scripts.seed_owner
 .venv/Scripts/python.exe -m scripts.seed_crew

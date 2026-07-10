@@ -75,11 +75,20 @@ def list_reminders(kind: ReminderKind | None = None, include_done: bool = False,
 @router.post("/{source_id}/done")
 def mark_done(source_id: str, db: DbSession = Depends(get_db),
               emp: Employee = Depends(get_current_employee)) -> dict:
-    """Owner checks off a reminder (e.g. the customer paid, or the card was charged manually)."""
+    """Owner checks off a reminder (e.g. the customer paid, or the card was charged manually).
+    A paid CC-charge reminder turns its calendar event **purple** (best-effort)."""
     brand = _owner_or_403(emp)
     r = db.scalar(select(Reminder).where(Reminder.brand == brand, Reminder.source_id == source_id))
     if r is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"No reminder '{source_id}'")
     r.done = True
+    mirrored = False
+    if r.kind == ReminderKind.cc_charge and r.gcal_event_id:
+        try:
+            from app.integrations import gcal
+            gcal.recolor_reminder_event(r.gcal_event_id, gcal.CC_PAID_COLOR)  # -> purple/Grape
+            mirrored = True
+        except Exception:
+            mirrored = False
     db.commit()
-    return {"ok": True, "id": source_id, "done": True}
+    return {"ok": True, "id": source_id, "done": True, "calendar_updated": mirrored}

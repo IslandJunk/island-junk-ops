@@ -40,6 +40,23 @@ def _assert_test_calendar(cal_id: str | None) -> str:
     return cal_id
 
 
+def _assert_reminder_calendar(cal_id: str | None) -> str:
+    """The off-board CC-charge reminder calendar (§9/§11) is the ONLY other writable
+    target. Still hard-refuses the two live dispatch calendars + primary + the TEST cal."""
+    if not cal_id:
+        raise CalendarGuardError("No reminder calendar configured (google_reminder_calendar_id).")
+    if cal_id in FORBIDDEN or cal_id == settings.google_test_calendar_id:
+        raise CalendarGuardError(f"REFUSING: '{cal_id}' is not the reminder calendar.")
+    if cal_id != settings.google_reminder_calendar_id:
+        raise CalendarGuardError("REFUSING: target is not the configured reminder calendar.")
+    return cal_id
+
+
+# CC-charge reminder event colours (Google colorIds; mirror the app lifecycle):
+CC_UNPAID_COLOR = 4   # Flamingo — residential unpaid (matches the day-board lifecycle)
+CC_PAID_COLOR = 3     # Grape/purple — paid / complete (Wes: "turned purple for complete")
+
+
 def _svc():
     global _service
     if _service is None:
@@ -106,4 +123,47 @@ def get_event(event_id: str) -> dict:
 
 def delete_event(event_id: str) -> None:
     cal = _assert_test_calendar(settings.google_test_calendar_id)
+    _svc().events().delete(calendarId=cal, eventId=event_id).execute()
+
+
+# ── CC-charge reminder calendar (off-board; §9/§11) ────────────────────────────
+
+def reminder_calendar_accessible() -> bool:
+    """True only if the service account can reach the reminder calendar (shared with it).
+    Lets callers mirror best-effort and skip cleanly until Wes shares the calendar."""
+    cal = settings.google_reminder_calendar_id
+    if not cal or cal in FORBIDDEN or cal == settings.google_test_calendar_id:
+        return False
+    try:
+        _svc().calendars().get(calendarId=cal).execute()
+        return True
+    except Exception:
+        return False
+
+
+def create_reminder_event(*, summary: str, description: str, on_date: date,
+                          color_id: str | int = CC_UNPAID_COLOR) -> str:
+    """Create an ALL-DAY CC-charge reminder on the reminder calendar (on the due date).
+    Returns the event id. Tagged so it's identifiable as app-created."""
+    cal = _assert_reminder_calendar(settings.google_reminder_calendar_id)
+    body = {
+        "summary": summary,
+        "description": description,
+        "colorId": str(color_id),
+        "start": {"date": on_date.isoformat()},
+        "end": {"date": (on_date + timedelta(days=1)).isoformat()},
+        "extendedProperties": {"private": {"ij_app": "1", "ij_kind": "cc_charge"}},
+    }
+    ev = _svc().events().insert(calendarId=cal, body=body).execute()
+    return ev["id"]
+
+
+def recolor_reminder_event(event_id: str, color_id: str | int) -> None:
+    """Recolour a reminder event (e.g. -> purple/Grape when the customer pays)."""
+    cal = _assert_reminder_calendar(settings.google_reminder_calendar_id)
+    _svc().events().patch(calendarId=cal, eventId=event_id, body={"colorId": str(color_id)}).execute()
+
+
+def delete_reminder_event(event_id: str) -> None:
+    cal = _assert_reminder_calendar(settings.google_reminder_calendar_id)
     _svc().events().delete(calendarId=cal, eventId=event_id).execute()
