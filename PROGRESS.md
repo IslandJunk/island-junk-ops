@@ -287,10 +287,16 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
      `twilio_validate_signatures=true`. No A2P 10DLC (CA local number).
    - **Square:** `square_access_token`, `square_location_id`, `square_environment=production`. Payment links only, never charges.
    - **Dropbox:** `dropbox_access_token` (leave `dropbox_root=/Island Junk TEST` until go-live).
-   **Remaining wiring (client-side, no creds needed):** outbound SMS triggers on the client flows (on-our-way / next-ETA /
-   completion buttons → `POST /sms/send`; booking-confirm already auto-sends server-side); a Square-link button on the
-   residential-bin invoice / job; the crew forms POSTing photos to `/dropbox/job-photo` on save. All are small bridge
-   additions once Wes wants them live.
+   **Client-side triggers WIRED this session (all dry-run safe, additive, non-blocking):** booking-confirm (server-side on
+   booking), **"On our way"** (day-board — the crew tap texts the customer; phone comes from the linked booked Job via a new
+   `customer_phone` field on the `/day-board` payload, never fuzzy; skipped when a stop has no Job/phone), and a **Square
+   payment-link button** on each ready-to-invoice item (owner-hub sheet, beside the 48h button). Verified in-browser: no
+   console errors, on-our-way composed + logged (dry-run), Square button → dry-run notice.
+   **Deferred to Wes's walkthrough (need a data/UX decision, NOT blocked on code):** the **residential completion** text
+   (the calc has no customer-phone field — the crew copies the text today; needs a phone field or the booking phone to flow
+   in), **next-customer ETA** (needs the NEXT stop's phone + the crew ETA-entry step), and **photo filing** (the real photo
+   source isn't in the data model yet — §8 customer-sent photos come in at booking; wire once that capture exists). The
+   `/sms/send`, `/square/payment-link`, `/dropbox/job-photo` endpoints are all ready for these.
 4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced).
    **Trucks + colour map now syncable — DONE this session too** (`apply_fleet`/`apply_colourmap`, status colours protected).
    Follow-ups: respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar

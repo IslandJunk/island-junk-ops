@@ -37,6 +37,7 @@ def _job_view(ev: dict, colour: ColourMap | None, job: Job | None) -> dict:
         "colour_id": colour.google_color_id if colour else None,
         # enriched from the linked Job row (may be None for manually-created events)
         "customer": job.customer_name if job else None,
+        "customer_phone": job.customer_phone if job else None,   # for the "on our way" text
         "address": job.address if job else None,
         "account_type": (job.account_type.value if (job and job.account_type) else None),
         "booking_lane": (job.booking_lane.value if job else None),

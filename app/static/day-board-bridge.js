@@ -30,6 +30,7 @@
         out.push({
           id: j.event_id, truck: num, day: dayOffset, time: timeStr(j),
           cust: j.customer || j.headline || "Job",
+          phone: j.customer_phone || "",   // from the linked booked Job — for the "on our way" text
           addr: j.address || "",
           type: typeFor(j),
           bin: j.booking_lane === "bins" || undefined,
@@ -68,12 +69,36 @@
   }
   window.__ijDayRefresh = refresh;
 
+  // "On our way" (SMS spec §2): when the crew taps it on a stop, text that customer from the
+  // updates line. Best-effort + non-blocking — the prototype's own button feedback runs first;
+  // we only add the send. Dry-run until Twilio creds, and skipped if the stop has no phone
+  // (e.g. a manager-created calendar event with no booked Job behind it).
+  function wireOnOurWay() {
+    if (typeof sendOnWay !== "function") return;
+    var _send = sendOnWay;
+    window.sendOnWay = function () {
+      var r = _send.apply(this, arguments);
+      try {
+        var s = (typeof CURRENT !== "undefined") ? CURRENT : null;
+        if (s && s.phone) {
+          fetch("/sms/send", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to: s.phone, kind: "on_our_way", params: { name: (s.cust || "").split(" ")[0] } }),
+          }).catch(function () {});
+        }
+      } catch (e) {}
+      return r;
+    };
+  }
+
   function start() {
     // Re-fetch a day whenever the manager switches the day tab.
     if (typeof setDay === "function") {
       var _sd = setDay;
       window.setDay = function (i) { _sd(i); loadDay(i).then(function () { rebuild(); render(); }); };
     }
+    wireOnOurWay();
     refresh();  // no-op board if not logged in yet; call __ijDayRefresh() after login
   }
   if (document.readyState !== "loading") start();

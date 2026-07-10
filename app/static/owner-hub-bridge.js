@@ -20,6 +20,35 @@
   // residential-bin invoice. Fires POST /reminders/cc-charge (idempotent per customer+addr+day);
   // the charge itself always stays manual (guardrail §2). The owner decides which bins are
   // residential — the app only surfaces the action.
+  // Square payment link (§4/§10): the owner taps to create a pay-by-card link for a job
+  // amount. The app NEVER charges — the customer pays via the link. Dry-run until Square creds.
+  window.__ijSquareLink = function (btn, amount, name) {
+    btn.disabled = true;
+    btn.textContent = "Creating link…";
+    fetch("/square/payment-link", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: String(amount), name: name || "Island Junk" }),
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
+      if (res && res.url) {
+        btn.parentNode.innerHTML = '<div class="meta" style="margin-top:8px;font-weight:700">'
+          + '💳 Payment link: <a href="' + esc(res.url) + '" target="_blank" rel="noopener">' + esc(res.url) + "</a></div>";
+      } else if (res && res.dry_run) {
+        btn.textContent = "Square not connected yet (dry-run)";
+      } else {
+        btn.disabled = false;
+        btn.textContent = "Create Square payment link";
+      }
+    }).catch(function () { btn.disabled = false; btn.textContent = "Create Square payment link"; });
+  };
+
+  function squareBtn(amount, name) {
+    if (amount == null) return "";
+    return '<button class="btn2" style="margin-top:9px;font-size:12.5px;padding:7px 10px"'
+      + ' onclick="__ijSquareLink(this,' + JSON.stringify(String(amount)).replace(/"/g, "&quot;")
+      + ',' + JSON.stringify(name || "").replace(/"/g, "&quot;") + ')">Create Square payment link</button>';
+  }
+
   window.__ijStartCcClock = function (btn, customer, address) {
     btn.disabled = true;
     btn.textContent = "Starting…";
@@ -45,7 +74,8 @@
       rows += card('<b>' + esc(x.customer || "Commercial job") + "</b>"
         + (x.address ? ('<br><span style="color:var(--muted);font-size:12.5px">' + esc(x.address) + "</span>") : "")
         + '<div class="meta" style="margin-top:6px;color:#3CA03C;font-weight:700">Commercial · '
-        + (x.total != null ? ("total " + money(x.total)) : "set the total") + " — ready to invoice</div>");
+        + (x.total != null ? ("total " + money(x.total)) : "set the total") + " — ready to invoice</div>"
+        + squareBtn(x.total, (x.customer || "Commercial job")));
     });
     (r.bins || []).forEach(function (x) {
       var ccBtn = '<button class="btn2" style="margin-top:9px;font-size:12.5px;padding:7px 10px"'
@@ -57,7 +87,7 @@
         + '<div class="meta" style="margin-top:6px;color:#3CA03C;font-weight:700">'
         + (x.charge != null ? ("disposal " + money(x.charge)) : "priced by weight")
         + (x.margin != null ? (" · margin " + money(x.margin)) : "") + " — ready to invoice</div>"
-        + ccBtn);
+        + ccBtn + squareBtn(x.charge, ("Bin " + x.code + (x.customer ? " — " + x.customer : ""))));
     });
     if (!rows) rows = '<div class="meta" style="margin-top:10px">Nothing ready right now.</div>';
     window.sheet("Ready to invoice",
