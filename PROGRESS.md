@@ -19,8 +19,12 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   scalars + JSONB substructures and upserts disposal **facilities + materials** (resolves facility name→id, logs
   `disposal_rate_history` on a cost/price change; owner-authoritative reconcile-deletes within a *present, non-empty* list,
   guarded against partial writes). Wired via `ij_rates_v1` in `HANDLERS` + the sync-bridge whitelist. **Verified in-browser**
-  (edited "Mixed general" $275→$285 → Postgres → survived reload; owner-guard refuses non-owners; seed restored). *(Still in
-  the cluster: residential/company customer edits, PM tree, custom-customer contracts, area surcharges — NEXT.)*
+  (edited "Mixed general" $275→$285 → Postgres → survived reload; owner-guard refuses non-owners; seed restored).
+  **Customer write-back LIVE too:** `apply_customers` (`ij_customers_v1`) + `apply_company_customers`
+  (`ij_company_customers_v1`) upsert new/edited customers from booking + the commercial-account editor (dedupe on
+  phone/email/co, department `accounts[]` persist, **upsert-only — never delete-by-absence** since the injected list is
+  thousands of rows). Verified (existing dedup, new added, accounts stick, cleaned up). *(Still in the cluster: PM tree,
+  custom-customer contracts, area surcharges — NEXT.)*
 
 - **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
   recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.

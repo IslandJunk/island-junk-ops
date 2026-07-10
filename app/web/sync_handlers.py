@@ -14,10 +14,14 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.auth.guards import is_owner
 from app.auth.security import hash_pin
+from app.customers.qb_import import company_key, residential_key
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
+from app.models.customer import CompanyCustomer, ResidentialCustomer
 from app.models.employee import Employee
-from app.models.enums import BinStatus, Brand, DisposalRole, OWNER_ONLY_GRANTABLE, PayType, ReminderKind
+from app.models.enums import (
+    BinStatus, Brand, CustomerSource, DisposalRole, OWNER_ONLY_GRANTABLE, PayType, ReminderKind,
+)
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
@@ -504,6 +508,84 @@ def apply_rates(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     return {"saved": True, "facilities": facs, "materials": mats}
 
 
+def apply_customers(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert residential customers (`ij_customers_v1`) — e.g. new customers saved during a
+    booking. Dedupe on digits phone / email / first|last; **upsert-only, never delete**
+    (the injected list can be thousands of rows; absence must not mean deletion)."""
+    if not isinstance(data, list):
+        return {"added": 0}
+    existing = {
+        residential_key({"phone": c.phone, "email": c.email, "first": c.first, "last": c.last}): c
+        for c in db.scalars(select(ResidentialCustomer).where(ResidentialCustomer.brand == brand))
+    }
+    added = updated = 0
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        first, last = (rec.get("first") or "").strip(), (rec.get("last") or "").strip()
+        phone, email = (rec.get("phone") or "").strip()[:40], (rec.get("email") or "").strip()[:180]
+        addr = (rec.get("addr") or "").strip()[:255]
+        if not (first or last or phone or email):
+            continue
+        key = residential_key({"phone": phone, "email": email, "first": first, "last": last})
+        c = existing.get(key)
+        if c is None:
+            c = ResidentialCustomer(brand=brand, first=first[:120] or None, last=last[:120] or None,
+                                    phone=phone or None, email=email or None, addr=addr or None)
+            db.add(c)
+            existing[key] = c
+            added += 1
+        else:   # fill blanks only — never wipe an existing value with an empty one
+            if phone and not c.phone:
+                c.phone = phone
+            if email and not c.email:
+                c.email = email
+            if addr and not c.addr:
+                c.addr = addr
+            updated += 1
+    db.commit()
+    return {"added": added, "matched": updated, "note": "upsert-only (no deletes)"}
+
+
+def apply_company_customers(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """Upsert commercial customers (`ij_company_customers_v1`) incl. their department/location
+    `accounts[]`. Dedupe on lowercased company name; upsert-only (no deletes)."""
+    if not isinstance(data, list):
+        return {"added": 0}
+    existing = {company_key({"co": c.co}): c
+                for c in db.scalars(select(CompanyCustomer).where(CompanyCustomer.brand == brand))}
+    added = updated = 0
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        co = (rec.get("co") or rec.get("name") or "").strip()
+        if not co:
+            continue
+        accounts = rec.get("accounts") if isinstance(rec.get("accounts"), list) else None
+        c = existing.get(company_key({"co": co}))
+        if c is None:
+            db.add(CompanyCustomer(
+                brand=brand, co=co[:180], name=(rec.get("name") or co)[:180],
+                contact=(rec.get("contact") or None), phone=(rec.get("phone") or None),
+                email=(rec.get("email") or None), addr=(rec.get("addr") or None),
+                accounts=accounts or [], src=CustomerSource.app))
+            added += 1
+        else:
+            if rec.get("contact"):
+                c.contact = rec["contact"]
+            if rec.get("phone"):
+                c.phone = rec["phone"]
+            if rec.get("email"):
+                c.email = rec["email"]
+            if rec.get("addr"):
+                c.addr = rec["addr"]
+            if accounts is not None:
+                c.accounts = accounts
+            updated += 1
+    db.commit()
+    return {"added": added, "matched": updated, "note": "upsert-only (no deletes)"}
+
+
 HANDLERS = {
     "ij_bins_v1": apply_bins,
     "ij_employees_v1": apply_employees,
@@ -516,4 +598,6 @@ HANDLERS = {
     "ij_fixes_resolved_v1": apply_fixes_resolved,
     "ij_reminders_v1": apply_reminders,
     "ij_rates_v1": apply_rates,
+    "ij_customers_v1": apply_customers,
+    "ij_company_customers_v1": apply_company_customers,
 }
