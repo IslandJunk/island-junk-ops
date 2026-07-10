@@ -11,15 +11,16 @@ localStorage:
   per (brand, truck, date). The parallel to the bin driver's walk-around (stored in
   `bin_driver_day`); flagged items already raise `ij_fixes_v1` defect flags — this keeps the
   full inspection record.
-
-(PO-chase `ij_po_needed_v1` deferred — its demo seed is guarded by a separate
-`ij_po_seeded_v1` flag, so it needs seed-guard handling before it can sync cleanly.)
+- **PoChase** (`ij_po_needed_v1`) — property-management PO#s to chase before invoicing (PM /
+  municipal net-30 jobs need a PO#). Created by the booking, chased in the hubs. Upsert by the
+  prototype's `id`; the prototype's demo sample is suppressed by injecting `ij_po_seeded_v1`.
 """
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -58,3 +59,13 @@ class PrecheckLog(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     logged_when: Mapped[str | None] = mapped_column(String(20), nullable=True)
     flagged: Mapped[int | None] = mapped_column(Integer, nullable=True)
     items: Mapped[list] = mapped_column(JSONB, nullable=False)   # [{id,label,status,note}]
+
+
+class PoChase(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
+    __tablename__ = "po_chase"
+    __table_args__ = (UniqueConstraint("brand", "source_id", name="uq_po_brand_source"),)
+
+    source_id: Mapped[str] = mapped_column(String(60), nullable=False)
+    status: Mapped[str | None] = mapped_column(String(30), nullable=True)   # needed|requested|ready
+    total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    doc: Mapped[dict] = mapped_column(JSONB, nullable=False)   # verbatim PO-chase record

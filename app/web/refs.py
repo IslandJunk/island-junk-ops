@@ -28,7 +28,7 @@ from app.models.enums import ACCESS_FLAGS, BinStatus, Brand, ColourKind, PayType
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
-from app.models.ops import FollowupReview, UsageEvent
+from app.models.ops import FollowupReview, PoChase, UsageEvent
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, RateCard
 from app.models.reminder import Reminder
 from app.models.settings import BrandSetting, DayNote
@@ -469,6 +469,19 @@ def build_usage_v1(db: DbSession, brand: Brand) -> list:
             for r in rows]
 
 
+def build_po_needed_v1(db: DbSession, brand: Brand) -> list:
+    """`ij_po_needed_v1` — PM PO#s to chase (verbatim records). Returns [] when empty (with
+    the seed-guard below, that means the owner sees a clean empty list, not the demo)."""
+    rows = db.scalars(select(PoChase).where(PoChase.brand == brand)).all()
+    return [r.doc for r in rows]
+
+
+def build_po_seeded_v1(db: DbSession, brand: Brand) -> str:
+    """`ij_po_seeded_v1` — a client seed-guard flag. Always "1" so the owner-hub's `poSeed()`
+    short-circuits and never writes its demo PO sample (which would otherwise sync)."""
+    return "1"
+
+
 _BUILDERS = {
     "ij_fleet_v1": build_fleet_v1,
     "ij_colourmap_v1": build_colourmap_v1,
@@ -495,6 +508,8 @@ _BUILDERS = {
     "ij_checklists_v1": build_checklists_v1,
     "ij_reviews_v1": build_reviews_v1,
     "ij_usage_v1": build_usage_v1,
+    "ij_po_needed_v1": build_po_needed_v1,
+    "ij_po_seeded_v1": build_po_seeded_v1,
     "ij_maint_v2": build_maint_v2,
     "ij_fixes_v1": build_fixes_v1,
     "ij_reminders_v1": build_reminders_v1,

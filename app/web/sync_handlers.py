@@ -34,7 +34,7 @@ from app.models.enums import (
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
-from app.models.ops import FollowupReview, PrecheckLog, UsageEvent
+from app.models.ops import FollowupReview, PoChase, PrecheckLog, UsageEvent
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
 from app.models.reminder import Reminder
 from app.models.settings import BrandSetting, DayNote
@@ -810,6 +810,35 @@ def apply_precheck(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     return {"upserted": n}
 
 
+def apply_po_needed(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_po_needed_v1` — property-management PO#s to chase. Upsert by `id`; upsert-only.
+    Owner/manager only (created by the booking, chased in the hubs). The demo sample is
+    suppressed client-side via the injected `ij_po_seeded_v1` flag, but we also skip any
+    record still tagged '— SAMPLE' as a belt-and-braces guard against seeding the demo."""
+    if not (is_owner(actor) or "manager" in (actor.access or [])):
+        return {"error": "forbidden — manager/owner only"}
+    if not isinstance(data, list):
+        return {"upserted": 0}
+    n = skipped = 0
+    for rec in data:
+        if not isinstance(rec, dict) or not rec.get("id"):
+            continue
+        if "SAMPLE" in (rec.get("company") or "").upper():
+            skipped += 1
+            continue
+        sid = str(rec["id"])
+        row = db.scalar(select(PoChase).where(PoChase.brand == brand, PoChase.source_id == sid))
+        if row is None:
+            row = PoChase(brand=brand, source_id=sid)
+            db.add(row)
+        row.status = rec.get("status")
+        row.total = _dec(rec.get("total"))
+        row.doc = rec
+        n += 1
+    db.commit()
+    return {"upserted": n, "skipped_samples": skipped}
+
+
 def apply_maint(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """Upsert the whole maintenance document (`ij_maint_v2` = {order, m, _v}) — one row
     per brand. Stored verbatim as JSONB so the prototype's structure + client-side
@@ -1315,6 +1344,7 @@ HANDLERS = {
     "ij_reviews_v1": apply_reviews,
     "ij_usage_v1": apply_usage,
     "ij_precheck_v1": apply_precheck,
+    "ij_po_needed_v1": apply_po_needed,
     "ij_maint_v2": apply_maint,
     "ij_fixes_v1": apply_fixes,
     "ij_fixes_resolved_v1": apply_fixes_resolved,

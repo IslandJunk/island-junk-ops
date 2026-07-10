@@ -39,7 +39,7 @@ attendance), the external integrations (Twilio/Square/Dropbox — need creds), a
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree, Alembic head **`a5abfdbdebfc`**
+**Repo state:** clean working tree, Alembic head **`56b3b57eb7b6`**
 (migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
 PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
 restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
@@ -158,6 +158,12 @@ Victoria↔Nanaimo switch is now THE workspace switch: everything the owner sees
   Nanaimo has no calendar yet — integration phase). Multi-tab: a stale page still syncs to the brand IT was served with
   (that's the safe behavior); reads use the session brand.
 
+**Operational tail — PM PO#s to chase** — migration `56b3b57eb7b6` (`po_chase`): `ij_po_needed_v1` (property-mgmt /
+municipal net-30 PO#s to collect before invoicing; created by the booking, chased in the hubs) upserts by `id` via
+`apply_po_needed` (owner/manager-guarded). Its demo sample is suppressed by injecting the client seed-guard flag
+`ij_po_seeded_v1` = "1" (so `poSeed()` short-circuits), belt-and-braces backed by the handler skipping any record still
+tagged "— SAMPLE". Verified: a real PO persisted while the SAMPLE was skipped. Injected on the owner/manager hubs + booking.
+
 **Operational tail — crew checklist templates** (no migration — generic `brand_setting`): `ij_checklists_v1` (the
 owner/manager-configurable walk-around + clock-out checklists per crew type) now persists via `apply_checklists`
 (owner/manager-guarded — a non-manager crew sync is rejected, verified) and injects on the owner-hub editor + the
@@ -238,14 +244,14 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    via `ij_clock_log`, and the handoff is ephemeral per-device state.
    - **Punch-time calendar mirror — DONE** (calendar shared + wired + verified; see the DONE section). Open: confirm
      per-day (chosen) vs per-punch with Wes; add a per-brand Nanaimo punch calendar when Nanaimo goes live.
-2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Done this session: reviews,
-   usage, **precheck**, **checklists** (+ fleet/colour-map in the brand-switching arc). Remaining worth persisting:
-   **`ij_stock_v1`** (supplies stock levels — needs a **seeded catalog**: its `BASE`/`NEWITEMS` are the REAL consumables
-   list, not demo, so it's a "seed the catalog + persist onHand per item" feature like disposal, not a plain sync; the
-   important flow — used/restock deltas — is already captured in `ij_usage_v1`), **`ij_po_needed_v1`** (PM PO#s — needs a
-   seed-guard: its demo is gated by `ij_po_seeded_v1`; inject that flag truthy or skip the sample in the handler; owner
-   creates POs via `poSavePO`), **`ij_swing_log_v1`** (swing-board activity log — append), **`ij_bin_notes_v1`/`ij_bin_done_v1`**
-   (bin-driver per-bin notes/done). **Intentionally NOT persisted** (device-local/ephemeral or already covered):
+2. **Operational-tail persistence — essentially COMPLETE for the clean/useful keys.** Done this session: reviews, usage,
+   precheck, checklists, PO# (+ fleet/colour-map in the brand-switching arc). Only lower-value remainders left, each with a
+   caveat: **`ij_stock_v1`** (supplies stock levels — needs a **seeded catalog**: its `BASE`/`NEWITEMS` are the REAL
+   consumables list, not demo, so it's a "seed the catalog + persist onHand per item" feature like disposal, not a plain
+   sync; the important flow — used/restock deltas — is already in `ij_usage_v1`), **`ij_swing_log_v1`** (swing-board weigh
+   log — largely **redundant** with the already-synced `ij_weighlog_v1`), **`ij_bin_notes_v1`/`ij_bin_done_v1`** (couldn't
+   confirm a writer in the current bin-tracker — likely dead/renamed keys; verify before modelling). **Intentionally NOT
+   persisted** (device-local/ephemeral or already covered):
    `ij_active_day_v1`, `ij_session_v1`, `*_seeded*` guards, `ij_resume_*` drafts, `ij_*_collapsed/open` UI state,
    `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` + **`ij_yard_clock_v1`** (both feed the authoritative
    `ij_clock_log`, which now also mirrors to the punch calendar — the yard clock-out already pushes into `ij_clock_log`),
