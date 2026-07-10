@@ -1,229 +1,193 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-09** — Backed the Victoria app end-to-end: FastAPI + Postgres (Render) behind the
-approved prototypes, with the calendar write/read loop proven and the crew's whole day
-persisting to Postgres. Schema design + open decisions live in `docs/data-model.md`; the
-scheduling rules in `island-junk-SPEC-scheduling-and-dispatch.md`.
+**2026-07-10** — Finished the **reference-data write-back** cluster (every owner-editable screen now saves to Postgres
+*and* the booking consumes those saved rates), retired the booking's demo customers, added two empty editable
+waste-class spots, and built the **§11 ready-to-invoice queue** on the owner hub. Also fixed a serving bug that was
+silently breaking the owner-hub dashboard. Victoria is now a broadly complete, backed, multi-user app behind the
+approved prototypes; the remaining big pieces are field/dispatch persistence, the external integrations
+(Twilio/Square/Dropbox — need creds), and Nanaimo phase 2.
 
-**Stack:** FastAPI + SQLAlchemy 2 + Alembic + Postgres (Render, connected via `.env`).
-Python 3.14. Serves the approved `/prototypes` HTML *untouched* — real DB data is injected
-inline as `localStorage` before each page's scripts run, and per-screen "bridges" swap
-`localStorage` writes for API calls. Deploy target: Render.
+**Stack:** FastAPI + SQLAlchemy 2 + Alembic + Postgres (Render, via `.env`). Python 3.14. Serves the approved
+`/prototypes` HTML **untouched** — real DB data is injected inline as `localStorage` in `<head>` before each page's
+scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
+override the prototype's hardcoded constants with real data. Deploy target: Render.
 
----
+**Repo state:** clean working tree, HEAD `f987c34`, Alembic head **`d83e4b664737`**. Login: **Manager / PIN 1111** or
+**Wes (owner) / PIN 4321**. Preview server config: `.claude/launch.json` (name `api`). Owner Hub has a *second* gate
+(owner password + simulated 2FA) — it's the prototype's own client-side demo; in browser tests call `unlock()` to skip it.
 
-## 1. DONE (whole build, verified)
-
-- **Ready-to-invoice queue (§11) LIVE (2026-07):** `app/invoicing/service.py::invoice_queue` aggregates what's ready to
-  bill — completed commercial `field_job`s (status=done), processed yard bins (**with the disposal margin**), and roll-off
-  bins **overdue** (dropped 14+ days, not picked). Owner-only `GET /invoice-queue`. `owner-hub-bridge.js` replaces the
-  owner hub's hardcoded demo alerts ("Ready to invoice", "Bins to bill/overdue") with the real counts + real detail sheets
-  (the fake "unpaid invoices $1,840" is dropped — payment status lives in QuickBooks, not the app). **Never invoices or
-  charges** (guardrail §2). Browser-verified (commercial $1,840 + bin margin $342 shown; owner-gated; test data cleaned).
-  **Also fixed a serving bug:** `_serve_prototype` replaced *every* `</body>`, corrupting prototypes that embed `</body>`
-  inside JS export-template strings (the owner hub's print/PDF docs) — now injects before the **last** `</body>` only.
-- **Reference-data write-back — RATE SHEET LIVE (2026-07):** the owner's rate-sheet edits now **persist to Postgres**
-  (was localStorage-only). `apply_rates` (`sync_handlers.py`, reverse of `build_rates_v1`, owner-only) writes rate_card
-  scalars + JSONB substructures and upserts disposal **facilities + materials** (resolves facility name→id, logs
-  `disposal_rate_history` on a cost/price change; owner-authoritative reconcile-deletes within a *present, non-empty* list,
-  guarded against partial writes). Wired via `ij_rates_v1` in `HANDLERS` + the sync-bridge whitelist. **Verified in-browser**
-  (edited "Mixed general" $275→$285 → Postgres → survived reload; owner-guard refuses non-owners; seed restored).
-  **Customer write-back LIVE too:** `apply_customers` (`ij_customers_v1`) + `apply_company_customers`
-  (`ij_company_customers_v1`) upsert new/edited customers from booking + the commercial-account editor (dedupe on
-  phone/email/co, department `accounts[]` persist, **upsert-only — never delete-by-absence** since the injected list is
-  thousands of rows). **PM tree write-back LIVE too:** `apply_pm` (`ij_pm_db_v2`) upserts the company→group→building tree,
-  matching by DB-uuid id else by name so a re-sync (client uid *or* DB id) never duplicates — verified (nested create,
-  round-trip no-dup, edit adds one building, cascade cleanup). **Contracts + area surcharges DONE — cluster COMPLETE:**
-  `apply_contracts` (`ij_contracts_v1`, near-1:1 Contract model) + rate-sheet custom customers (`ij_rates_v1.customers[]` →
-  Contract `rc_*`, extras kept in `properties`) both persist + round-trip (`build_contracts_v1`, `build_rates_v1.customers`).
-  **Area surcharges:** added `area_surcharge.roofing_bin_amount` (migration `d83e4b664737`); the rate sheet's "Bin rental &
-  areas" section (`ij_rates_v1.surcharges` + `roofingSurcharges`) now persists via `apply_rates` + emits via `build_rates_v1`;
-  `scripts/seed_surcharges.py` seeded Victoria's 8 areas (base + 7; Sooke roofing $35 vs regular $60 preserved). **All
-  verified** (surcharge edit, custom-customer + contract round-trip, seed, cleanup). So every owner reference screen —
-  rates, disposal, customers, PM, contracts, surcharges — now saves to Postgres.
-
-- **Calendar stack-order spike PROVEN** (`/spike`) — the highest-risk unknown. `orderBy=startTime`
-  recovers the manager's manual top-to-bottom stack; the `#`-note rule + headline-time parse added later.
-- **Foundation** — brand-tagged base/mixins, config, PIN auth + **owner-only guard** (logic layer). Real login on Render.
-- **30 tables** on Render via 11 Alembic migrations (+ maintenance_doc, defect_flag, reminder[+gcal_event_id], area_surcharge[+roofing_bin_amount]): employee, owner_security, device, auth_session,
-  colour_map, truck, truck_alert_pref, residential_customer, company_customer, pm_company/group/building,
-  job, bin, rate_card, area_surcharge, surcharge_waiver, contract, disposal_facility, disposal_material,
-  disposal_rate_history, incident, clock_punch, field_job, weigh_log, yard_processing.
-- **Real data seeded** — 75-bin fleet, 15-person roster (PINs `0000` placeholder), Victoria rate card,
-  trucks #3–7, colour map (decided scheme), starter colour→truck (Tangerine→3, Peacock→4, Banana→5).
-- **Booking engine** — `POST /booking` writes the job + **ONE Sage event to the TEST calendar** (live-calendar
-  guard enforced). All 7 lanes wired via `/app/new-booking` + `booking-bridge.js` (Collect + Invoiced browser-verified).
-- **Day Board reader** — `GET /day-board` → drops `#` notes → colour→truck → **stack order = route order** →
-  headline time. Wired to `/app/day-board` showing live routes. `is_manager_note` + `parse_headline_time` unit-tested.
-- **Login + all 18 screens** — `/app` real PIN login → launcher (access-gated tiles) → every screen served via the
-  `SCREENS` registry with its DB refs injected. Truck Hub / Bin Registry / crew calculators verified on real data.
-- **Reference data from DB** (`app/web/refs.py`): fleet, colour map, bins, employees, rates (+ incidents/clock/
-  field-jobs/weigh, None-until-data so screens keep demo until real rows exist).
-- **Write-persistence — the whole crew day → Postgres** via generic sync (`/sync`, `sync-bridge.js` on every page)
-  + a dedicated yard endpoint: **bins, roster (owner-guarded), incidents, clock in/out, job completion (field_job),
-  yard weigh, and the yard-processing rich record** (waste class, stream %, gross/tare/net, dump fee — the disposal
-  cost-model input). All verified against Render.
-- **Maintenance + reminders persistence + 48h CC-charge reminder LIVE + tested.** Migration `46d1bfdb249d` adds
-  3 tables (Render migrated). **Maintenance** (`ij_maint_v2`) persists as one JSONB **doc per brand** (`maintenance_doc`)
-  — the whole `{order,m,_v}` verbatim, so the prototype's structure + client-side migrations are untouched.
-  **Defect flags** (`ij_fixes_v1` walk-arounds → `defect_flag`): upsert-by-id, closed via `ij_fixes_resolved_v1`.
-  **Reminders** (`ij_reminders_v1` → `reminder`): upsert-by-id + "done = removed from list" reconcile, scoped to
-  app kinds so it never clobbers owner CC-charge rows. New sync handlers (`apply_maint/fixes/fixes_resolved/reminders`)
-  + `sync-bridge.js` whitelist + refs (`build_maint_v2/fixes_v1/reminders_v1`) wired to the maintenance/reminders/truck
-  screens. **§9/§11 CC-charge reminder** (`app/reminders/service.py`, refined with Wes): the 48-hour clock starts when the
-  owner **SENDS THE INVOICE** (after pickup, sometimes days later) — NOT at drop — and "48h" = **2 working days**
-  (`app/core/dates.py` skips weekends + BC stat holidays incl. Boxing Day + Truth & Reconciliation; Fri invoice → Tue).
-  Created via `POST /reminders/cc-charge` (`invoice_date` defaults to today) → `kind=cc_charge`, "CC? UNPAID (DATE)…manual";
-  owner queue `GET /reminders?kind=cc_charge` + `POST /reminders/{id}/done`. **The charge stays manual** (guardrail §2).
-  Booking no longer auto-creates it. **Verified** on Render (blob round-trip, flag add+resolve, reminder reconcile leaving
-  CC-charge intact, Fri-invoice→Tue-due, booking makes none, owner check-off, manager 403; all test rows deleted).
-- **QuickBooks customer import (§13) — DONE + Victoria data LIVE on Render (2026-07).** `app/customers/qb_import.py`
-  parses a **QuickBooks Customer Contact List** in **CSV or Excel** (`.xlsx` via openpyxl; skips the report preamble/BOM;
-  **alias-mapped headers**; stitches multi-line billing addresses; **normalizes the multi-number "Phone Numbers" cell to
-  the first number** + caps every field to its column length). **Classifier:** an explicit Company column wins; else
-  (Wes's real export has none) `infer_kind` — a company keyword/number/`&`/`c/o` ⇒ company, else a ≤3-word name ⇒ person,
-  longer ⇒ organisation (catches numbered cos, orgs-with-a-contact, and tokenless orgs). Dedupes on phone/email/name;
-  idempotent. Owner-only `POST /customers/import/preview|apply` + `GET /customers/summary`;
-  `scripts/import_customers.py "<file>" [--apply]`. **Wes's `Victoria Customers.xlsx` (3,002 rows) imported:
-  +2,173 residential, +824 company** (5 dup, 0 unusable); `build_customers/company/pm` refs now serve them to the
-  booking screen (verified). *(The .xlsx is git-ignored — the PII lives only in Postgres.)* Still open: demo
-  `QB_CUST/QB_COMM` consts coexist in the booking screen (see §2); PM tree isn't in a contact list (stays app-entered).
-- **Disposal cost model LIVE** — `scripts/seed_disposal.py` seeds Victoria's **7 facilities + 24 materials + 24
-  rate-history rows** (from `island-junk-rate-sheet-v14.html`, idempotent, every material FK'd to a facility).
-  `app/yard/disposal.py::compute_load_margin` turns a `yard_processing` load into a margin: customer charge =
-  headline `waste_class` price × net tonnage; our cost = the class's own `cost` × tonnage (pass-through) **or**
-  Σ(stream% × tonnage × stream cost) for a blank-cost Yard-sort class; margin = charge − cost. Costs pulled **live**
-  from the registry (edit a rate once → re-prices everywhere). `build_rates_v1` now emits the real facilities/disposal
-  into `ij_rates_v1`. Owner-only `GET /disposal/margins` reads it. **Verified end-to-end** on Render (POST yard load →
-  margins showed charge 550 / cost 208 / margin 342; streams + explicit + label-normalization + no-weight + unknown-class
-  paths all checked; test row deleted). **Model confirmed w/ Wes (2026-07):** the **mixed** rates ($275 <50% wood /
-  $245 ≥50% wood) are what **we charge** at our yard (Yard-sort, blank cost); the clean/dirty wood ($80/$110) + all other
-  sorted rates are what **we pay** at the landfills. The `rate-sheet` screen (`island-junk-rate-sheet-v14.html`) is now
-  registered + served with the real `ij_rates_v1` so the owner sees/edits it live.
+Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-SPEC-scheduling-and-dispatch.md`,
+`island-junk-SPEC-login-sessions-and-access.md`, `island-junk-SPEC-sms-and-texting.md`, `docs/data-model.md`,
+`island-junk-CURRENT-VERSIONS.md`, and `CLAUDE.md`.
 
 ---
 
-## 2. IN FLIGHT (loose ends, nothing mid-edit)
+## 1. DONE (whole build, verified against Render)
 
-- ~~**QuickBooks demo-const suppression**~~ **RESOLVED (2026-07):** `booking-bridge.js::retireDemoCustomers` empties the
-  const `QB_CUST` (4) + `QB_COMM` (5) demo arrays in place once real customers are injected, and sets `ij_comm_seeded_v1`
-  so `commLoad()` never merges the demo back (which would also sync it). Browser-verified: only the 2,173 residential +
-  824 company real customers show, no demo merged into localStorage or the DB.
-- **Yard waste-class picker still hardcoded** — the disposal cost model is live, but the yard-processing screen's
-  `WASTE_CLASSES` list (13 labels) is still a hardcoded array that *overlaps but ≠* `disposal_material.m` (24 rows).
-  The compute reconciles the two via `WASTE_CLASS_ALIAS` + whitespace normalization, but two picker labels have **no
-  registry material** (`Mixed drywall (≥31%)`, `Concrete/clay tile`) → a load booked under those returns
-  `cost_basis:"unknown"` with a warning. The proper fix (flagged in `docs/data-model.md`) is to drive the picker from
-  the materials registry so there's one source. Deferred — needs a careful yard-screen edit.
-- **Booking lanes 3–7** (bins, pm, contracts, custom, pallet) — wired by the *generic* bridge (keys off `curType`),
-  but only Collect + Invoiced were browser-clicked. Should spot-check each lane's modal in a browser.
-- **Yard `#wDone` literal-click** — the save path (`/yard-processing`) is proven from the real page, but the crew/truck
-  fields are sheet-closure state, so I set the record as `grab()` would and POSTed via the bridge's exact path rather
-  than clicking through the full sheet. A real end-to-end click-through is untested.
+**Foundation & data**
+- Calendar **stack-order spike PROVEN** (`/spike`): `orderBy=startTime` recovers the manager's manual top-to-bottom stack.
+- Brand-tagged base/mixins, config, **PIN auth + owner-only guard** (logic layer, not just hidden UI).
+- **30 tables via 11 Alembic migrations.** Seeded: 75-bin fleet, 15-person roster (PINs `0000` placeholder), Victoria
+  rate card, trucks #3–7, colour map + starter colour→truck, disposal facilities/materials + rate history, area surcharges.
+- **Reference data from DB** (`app/web/refs.py`): fleet, colour map, bins, employees, rates (facilities/materials/
+  **surcharges/custom-customers**), incidents, clock, field-jobs, weigh, maintenance doc, defect flags, reminders,
+  residential/company customers, PM tree, contracts. None-until-data so a screen keeps its demo until real rows exist.
+
+**Booking / dispatch**
+- **Booking engine** — `POST /booking` writes the Job + **ONE Sage event to the TEST calendar** (live-calendar guard
+  enforced). All 7 lanes wired via `booking-bridge.js`; a **full Bins booking** was driven end-to-end in the browser.
+- **Day-Board reader** — `GET /day-board` drops `#` manager notes → colour→truck → **stack order = route order** →
+  headline time. (`is_manager_note` + `parse_headline_time` unit-tested.)
+- **Booking now reads the saved rate sheet** (`booking-bridge.js::applyRateSheet`): residential `RES` (loads/min/labour/
+  GST/parking/items), commercial `COMM` (loads + included-minutes), and `binBase`/`binSurFor` all read `ij_rates_v1`
+  (added to the new-booking ref keys). Browser-verified live (edited a DB rate → booking reflected it → tracked back).
+- **Demo customers retired** — `retireDemoCustomers` empties the const `QB_CUST`/`QB_COMM` in place once real customers
+  are injected; only the imported 2,173 + 824 show, nothing demo merges/syncs.
+
+**Crew/yard/owner day → Postgres (write-coverage)**
+- Whole crew day persists via generic `/sync` (`sync-bridge.js` whitelist) + a dedicated yard endpoint: **bins, roster
+  (owner-guarded), incidents, clock in/out, field-job completion, yard weigh, and the rich yard-processing record**
+  (waste class, stream %, gross/tare/net, dump fee). Yard `#wDone` full sheet click-through browser-verified → margin.
+- **Maintenance + reminders + defect flags** persist: `maintenance_doc` (whole `ij_maint_v2` JSONB doc/brand),
+  `defect_flag` (`ij_fixes_v1` + `ij_fixes_resolved_v1`), `reminder` (`ij_reminders_v1`, done=absent reconcile).
+
+**Disposal cost model**
+- `scripts/seed_disposal.py`: 7 facilities + **26 materials** (24 + 2 empty editable spots) + rate history.
+- `app/yard/disposal.py::compute_load_margin`: charge = waste-class price × net tonnes; cost = the class's own cost, or
+  Σ(stream% × tonnes × stream cost) for a yard-sort class; margin = charge − cost. Costs read **live** from the registry.
+- Owner-only `GET /disposal/margins`. **Model confirmed w/ Wes:** mixed rates ($275 <50% wood / $245 ≥50%) = what we
+  charge (yard); clean/dirty wood ($80/$110) + sorted rates = what we pay (landfill).
+
+**QuickBooks customer import (§13)** — `app/customers/qb_import.py` reads a Customer Contact List in **CSV or Excel**
+(openpyxl; alias-mapped headers; multi-line address stitch; multi-number "Phone Numbers" → first number; field-length
+caps). Classifier handles a **no-Company-column** export via `infer_kind` (keyword/number/name-shape). Owner-only
+`POST /customers/import/preview|apply`, `GET /customers/summary`; `scripts/import_customers.py "<file>" [--apply]`.
+**Wes's `Victoria Customers.xlsx` imported: 2,173 residential + 824 company.**
+
+**CC-charge reminder (§9/§11)** — invoice-triggered, **48h = 2 working days** (`app/core/dates.py` skips weekends + BC
+stat holidays; Fri invoice → Tue). `POST /reminders/cc-charge` (invoice_date defaults today) → owner queue
+`GET /reminders?kind=cc_charge` + `POST /reminders/{id}/done`. **Off-board Google reminder calendar is LIVE** (calendar
+"CC Charge Reminders" shared with the service account): a new reminder creates a Flamingo all-day event on the due date;
+marking paid recolours it **purple/Grape**. Guarded to that calendar ONLY (dispatch + TEST calendars hard-refused). The
+charge itself is always manual.
+
+**Reference-data write-back — CLUSTER COMPLETE (every owner edit saves)**
+- **Rate sheet** (`apply_rates`, owner-only): rate_card scalars + JSONB, disposal facilities + materials (rate history on
+  change; owner-authoritative reconcile within a present non-empty list), **area surcharges** (regular + `roofing_bin_amount`),
+  and **custom customers** (`ij_rates_v1.customers[]` → `contract` `rc_*`, extras in `properties`). Screen registered at
+  `/app/rate-sheet`.
+- **Customers** (`apply_customers` / `apply_company_customers`): upsert-only (never delete-by-absence; the list is thousands).
+- **PM tree** (`apply_pm`): nested company→group→building upsert, matched by DB-uuid id else name (no dup on re-sync).
+- **Contracts** (`apply_contracts`, `ij_contracts_v1`): near-1:1 model upsert; `build_contracts_v1` feeds the booking.
+
+**Owner ready-to-invoice queue (§11)** — `app/invoicing/service.py::invoice_queue`: completed commercial `field_job`s +
+processed yard bins (**with disposal margin**) + roll-off bins **overdue** (14+ days). Owner-only `GET /invoice-queue`.
+`owner-hub-bridge.js` replaces the hub's demo alerts with real counts + detail sheets (dropped the fake unpaid-invoices
+tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
+
+**Endpoints:** `/auth/*`, `/booking`, `/day-board`, `/sync`, `/yard-processing`, `/disposal/margins`,
+`/customers/import/*` + `/customers/summary`, `/reminders*`, `/invoice-queue`.
+
+---
+
+## 2. IN FLIGHT (nothing is mid-edit / broken — these are small open loops)
+
+- **Yard-waste "min $24" row** — Wes described yard-waste dump prices as min $24 / small $40 / medium $75 / large $100.
+  The size prices ($40/$75/$100) already live in the rate sheet's `yardWaste` rows and are editable/persisted. The distinct
+  **min $24** row is NOT added yet — waiting on Wes to confirm he wants it, then it's a small `yardWaste`-shape + rate-sheet
+  wire-up.
+- **Two empty waste-class prices** — `Mixed drywall (≥31%)` and `Concrete/clay tile` are seeded with a **blank** per-ton
+  charge (editable spots in the rate sheet). They cost out as soon as Wes fills the price; until then the margin marks them
+  uncosted (by design).
+- **CC-charge "start 48h clock" UI** — the endpoint + calendar mirror work; there's no button yet on an owner invoicing
+  screen to fire it when he sends a residential-bin invoice. Add the button when the owner invoicing UI is built.
 
 ---
 
 ## 3. NEXT (in order)
 
-1. **Browser verification — DONE (2026-07):** clicked through the real app: **login** (PIN → `/auth/login` →
-   access-gated launcher ✓), **reminders** (typed → sync-bridge → Postgres → survives reload ✓), **yard-processing full
-   `#wDone`** (bin 12-09 → `/yard-processing` → Postgres → disposal margin $342 ✓ — the flagged-untested flow),
-   **maintenance hub** (fleet + due-status ✓), and a **full Bins booking end-to-end** (fill → CREATE JOB → "Book it" →
-   `/booking` → job row + **Sage** event colorId 2 on the TEST calendar → cleaned up ✓). **Owner all-access DONE (Wes):**
-   `build_employees_v1` grants the owner the full `ACCESS_FLAGS` set, and `main-hub-bridge.js` unlocks the PIN-gated hubs
-   (Manager Hub) for the owner only (verified: owner opens Manager Hub directly, no PIN). **Booking-bridge fix:**
-   `customerFor` now maps the Bins/Pallet lanes' `binCust`/`palCo` (customer was dropped before). All test rows + TEST
-   calendar events deleted.
-2. **Integrations** — first outbound: Twilio booking-confirmation text OR a Square payment link on the job
-   (see `island-junk-SPEC-sms-and-texting.md` for the shared send-only updates line). Then the **off-board Google
-   reminder-calendar mirror** for CC-charge reminders (write-only to a dedicated reminder calendar — needs its id, §4).
-3. **Drive the yard waste-class picker from the disposal registry** (retire the hardcoded `WASTE_CLASSES` — see §2).
-4. **Confirm QB import vs Wes's real export** + retire the `QB_CUST/QB_COMM` demo consts (see §2).
+1. **Field/dispatch persistence** — bin-tracker driver tool (richest tool, currently in-memory only → persist),
+   day-board crew overlays (`ij_dayboard_status/notes/sitelog_v1`), and breaks (`ij_breaks_v1`) + attendance
+   (`ij_attendance_v1`). Same model→migration→sync-handler→ref pattern used everywhere else.
+2. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
+   crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
+   payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number.
+3. **Nanaimo phase 2** — owner-only "Set up this workspace" screen: basics → calendar → QuickBooks customer import → copy
+   Victoria's rate card + edit differences → people/trucks → bins/colour map → texting number (§13).
+4. **Owner invoicing UI polish** — a "start 48h clock" button (fires `POST /reminders/cc-charge`) and, if wanted, a
+   read-side for unpaid invoices (that data lives in QuickBooks; the app can't compute it).
+5. **Yard waste-class picker from the registry** — optional cleanup so an owner-added class auto-appears in the yard
+   picker (the margin already reconciles labels vs `disposal_material.m`; needs care re: the nested `suggestClass`).
 
 ---
 
-## 4. OPEN DECISIONS (waiting on Wes)
+## 4. OPEN DECISIONS (waiting on Wes — context in `docs/data-model.md`)
 
-- **Bin truck's real dispatch number/label** — prototype's "12" is demo; not seeded (`scripts/seed_bins.py`).
-- **Real unique PINs for the crew** — all seeded `0000`; owner must set real PINs before crew can log in.
-- **Nanaimo-leased bins brand** — the 11 ROSS bins are seeded `brand=victoria` with `leased=True`; when the Nanaimo
-  workspace is built, decide whether they move to `brand=nanaimo`.
-- **Access-flag canonical list** + the orphan `reminders` flag — proposed in `docs/data-model.md`; confirm.
+- **Colour semantics that touch Make.com** (high-stakes — Make reads job status colour off the ISLAND JUNK VICTORIA
+  calendar and fires ad-conversion signals). Resolved in `docs/data-model.md` (2026-07-09) but **confirm before go-live**:
+  **Flamingo(4) = STATUS only** (residential unpaid — CC *or* e-transfer; never a truck), and the **bin truck = Graphite/
+  Blueberry** (Lavender stays a free assignable colour, NOT the bin truck). Preserve the exact colours Make keys on.
+- **7 booking lanes vs the brief's 5 types** — modeled as `booking_lane` (collect/invoiced/bins/pm/contracts/custom/pallet)
+  + `account_type` + bin `action`; §7's flat 5-value `type` was retired. Confirm this is the intended taxonomy.
+- **Real crew PINs** — all seeded `0000`; owner must set real per-person PINs before crew can log in.
+- **Bin truck's real dispatch number/label** — prototype's "12" is demo; the maintenance seed labels it "Bin truck (Hino) · #12".
+- **Two empty waste-class prices** + the **yard-waste `min $24` row** (see §2).
+- **QuickBooks export** — his real export had **no Company column** (handled by name-shape inference). A re-export *with*
+  the Company Name column would give an authoritative company/residential split; and **wood default** is clean $80 (Wes: no
+  preference) — flip to $110 in the rate sheet if mixed-load wood is usually treated.
+- **Access-flag canonical list** (`docs/data-model.md`) — confirm the 12 flags + owner-only-grantable set (owner/estimate/swing).
 - **Missing file** — `island-junk-nanaimo-setup-rates-v1.html` is referenced but not in the repo (only its store shape).
-- **June-2026 expanded palette** — classic palette has only 3 hand-load colours, so only 3 hand-load trucks can run
-  distinctly; the full 24-colour set is needed to colour all of #3–7.
-- **Spec §4 `#3 truck` example** — reads like a typo for `Truck #3`; implemented the plain leading-`#` = note rule.
-  Confirm (see `app/dispatch/calendar_read.py::is_manager_note`).
-- **Disposal stream→cost mapping** (`app/yard/disposal.py::STREAM_MATERIAL`) — streams costed at what we PAY at the
-  landfill: junk→"General refuse (sorted)" $160, **wood→"Clean wood" $80**, drywall→"Drywall — clean/tested new" $415,
-  concrete→"Clean concrete" $41, metal→$0 (income), recycle→"Cardboard" $0. **Wood (Wes 2026-07):** clean = bare lumber
-  $80/t; treated/dirty (painted/stained/treated) = $110/t. Kept clean $80 as the default since the yard form has one
-  "wood %"; if mixed-load wood is usually treated, flip the map to $110, or split the stream clean-vs-treated (form change).
-- ~~**Two waste-class picker labels have no priced material**~~ **RESOLVED (2026-07, Wes):** `Mixed drywall (≥31%)` +
-  `Concrete/clay tile` seeded as materials with a **blank per-ton charge** (empty editable spots — Wes fills the price in
-  the rate sheet when ready). Registry now covers all 13 picker labels; margin resolves them (charge null until priced).
-  *(Yard-waste dump prices small/med/large $40/$75/$100 are already editable in the rate sheet's yard-waste rows; confirm
-  whether a distinct `min` row is wanted.)*
-- **QuickBooks export format — RESOLVED (2026-07):** Wes's real `Victoria Customers.xlsx` has **no Company column** (cols:
-  Customer, Phone Numbers, Email, Full Name, Billing/Shipping Address). Handled via `infer_kind` (keyword/number/name-shape)
-  + xlsx support + phone normalization; imported 2,173 residential / 824 company. Residual: a handful of tokenless
-  businesses may land in residential — the owner can fix in-app. To re-classify wholesale later, clear `src='qb'` rows and
-  re-import (dedupe skips existing, so it won't reclassify in place).
-- **CC-charge reminder — LIVE incl. calendar mirror + VERIFIED (2026-07):** 48h = 2 working days, invoice-triggered (above).
-  The **off-board Google reminder-calendar mirror is live** — calendar "CC Charge Reminders"
-  (`c_139129…@group.calendar.google.com`, in `config.google_reminder_calendar_id`) is now **shared with the service account**
-  `ij-calendar-spike@island-junk-spike.iam.gserviceaccount.com`. A new CC-charge reminder creates an all-day **Flamingo**
-  event on the due date; marking it paid (`POST /reminders/{id}/done`) recolours it **purple/Grape** (colorId 3).
-  `app/integrations/gcal.py` `create/recolor/delete_reminder_event` are guarded to that calendar ONLY (dispatch + TEST
-  hard-refused, both directions). **Verified end-to-end on the real calendar** (create→Flamingo, paid→purple, delete; test
-  event removed). Mirror is best-effort (reminder saves in-DB even if the calendar is unreachable). Still needs a UI
-  "start 48h clock" button at invoice time; if a reminder is ever created while the calendar is down, a back-fill is TODO.
-- *Resolved this session (in docs/data-model.md):* Flamingo = residential unpaid (CC **or** e-transfer), status-only;
-  bin truck = Graphite/Blueberry; Tomato→Flamingo lifecycle; 7 booking lanes; merged bin lifecycle enum; dispatch
-  `truck` table separate from a future maintenance `vehicle` table.
+- **June-2026 expanded palette** — the classic palette has only 3 hand-load colours, so only 3 of trucks #3–7 colour
+  distinctly; the full 24-colour set is needed to colour all five.
 
 ---
 
 ## 5. GOTCHAS (don't forget)
 
-- **Alembic + shared `brand` enum:** autogenerate emits inline `sa.Enum('victoria','nanaimo', name='brand')` in *every*
-  new migration — you MUST hand-edit it to a module-level `postgresql.ENUM(..., name='brand', create_type=False)` and
-  reference it, or you get "type brand already exists". New enums: create once with `checkfirst=True` + `create_type=False`
-  on columns. (Every migration in `migrations/versions/` shows the pattern.)
-- **Owner is `brand=NULL`** (shared across brands). Any brand-scoped employee lookup MUST include brand-null
-  (`or_(brand==b, brand.is_(None))`) — otherwise you create a duplicate owner (bug we hit + fixed in `apply_employees`).
-- **ORM registry:** `app/models/__init__.py` is intentionally EMPTY (avoids a cycle base→types→enums). Import
-  `app.models.all` to register every model; `new_session()` already does. Alembic env + `app.main` import it too.
+- **Scheduling spec §4 — the "#" rule (STANDING RULE):** a **leading `#` in a Google Calendar event title = a manager-only
+  note the app ignores completely** (not a job, not dispatch). The day-board reader already drops these
+  (`app/dispatch/calendar_read.py::is_manager_note`). Build it into every future calendar reader too. *(Open: the spec's
+  `#3 truck` example reads like a typo for `Truck #3`; we implemented the plain leading-`#` = note rule — confirm.)*
+- **Calendar guard (NEVER weaken):** `app/integrations/gcal.py` hard-refuses the two live IDs (`LIVE_VICTORIA`, `LIVE_JOBS2`)
+  + `primary`. Booking writes ONLY the configured TEST calendar; CC-charge writes ONLY the configured reminder calendar
+  (each guard refuses the other's target too). Every calendar test creates a **real** event on those calendars — delete it
+  by id afterward.
+- **`_serve_prototype` injects before the LAST `</body>` only** (not replace-all) — some prototypes embed `</body>` inside
+  JS export-template strings (owner hub's PDF/print docs); a replace-all injects a `<script>` mid-string and kills that whole
+  script block. (`</head>` uses the FIRST match, which is the real page head.)
+- **Bridges mutate `const`s in place** — you can't reassign a top-level `const` (RES, QB_CUST, WASTE_CLASSES, OWNER_ALERTS)
+  from a later script, but you CAN mutate its properties / `.length`. That's how the booking/owner-hub bridges retrofit real
+  data without touching the prototype files.
+- **Alembic + shared `brand` enum:** autogenerate emits inline `sa.Enum('victoria','nanaimo', name='brand')` in every new
+  migration — hand-edit to a module-level `postgresql.ENUM(..., name='brand', create_type=False)`. New enums: create once
+  with `checkfirst=True` + `create_type=False` on columns (see the `reminder_kind` migration).
+- **Owner is `brand=NULL`** (shared). Any brand-scoped employee lookup MUST include brand-null
+  (`or_(brand==b, brand.is_(None))`) or you duplicate the owner.
+- **ORM registry:** `app/models/__init__.py` is intentionally EMPTY (avoids a base→types→enums cycle). Import
+  `app.models.all` to register every model; `new_session()` + Alembic env + `app.main` already do.
 - **Python 3.14 (bleeding edge):** plain `uvicorn` (not `[standard]`), `psycopg[binary]`, `pbkdf2_sha256` (not bcrypt),
-  and `tzdata` (Windows has no tz DB, needed by `zoneinfo` in `gcal.list_events_for_day`).
+  `tzdata` (Windows has no tz DB), and **`openpyxl`** (xlsx import). All in `requirements.txt`.
 - **Refs vs sync:** refs inject inline in `<head>` (synchronous, before prototype scripts → no echo); `sync-bridge.js`
-  overrides `localStorage.setItem` at end of `<body>` → only *user* writes sync. `reference_bootstrap_script` skips a
-  builder returning `None` (no half-empty blobs that break a screen).
-- ~~**Booking calc uses a hardcoded `RES` constant**~~ **RESOLVED (2026-07):** `booking-bridge.js::applyRateSheet` now
-  mutates the prototype's `RES` (residential loads/min/labour/GST/parking/items) and overrides `binBase`/`binSurFor` from
-  the injected `ij_rates_v1` (added to the new-booking screen's ref keys). Owner rate-sheet edits flow to booking estimates
-  — browser-verified live (DB full-load 650→700 & Oak Bay surcharge 10→20 showed in the booking, then tracked back on
-  restore). Crew calculators already read `ij_rates_v1`.
-- **Day board truck lanes** come from `ij_fleet_v1` + `ij_colourmap_v1` (injected from DB) — colour→truck must map to real
-  fleet numbers or jobs land on lanes that don't render.
-- **Every calendar test creates real TEST-calendar events — always delete them by id afterward.** The guard
-  (`app/integrations/gcal.py`) hard-refuses the two live IDs and anything but the configured TEST calendar.
-- **Cosmetic only:** Windows console renders `—`/`·`/`≥` as `�` in Bash output (DB stores correct UTF-8); TestClient
-  prints a harmless "httpx deprecated" warning (test client only, not the app).
+  overrides `localStorage.setItem` at end of `<body>` → only *user* writes sync, and only for the `SYNCED` whitelist keys.
+  A builder returning `None` is skipped (no half-empty blob).
+- **Windows console renders `—` / `·` / `≥` / `≤` as `�`** in Bash output (DB stores correct UTF-8) — prefix Python one-liners
+  with `PYTHONIOENCODING=utf-8` when printing those. TestClient prints a harmless "httpx deprecated" warning.
+- **PII stays out of git:** `.gitignore` excludes `.env`, `**/service-account-key.json`, `**/.venv/`, `spike/out/`, and
+  customer exports (`*Customers*.xlsx` / `*.csv`). Verified: `.env`, the key, and `Victoria Customers.xlsx` are ignored.
 
 ---
 
 ## 6. HOW TO RESUME
 
-**Prereqs already in place:** `.env` (Render `DATABASE_URL` + `SESSION_SECRET`), `spike/service-account-key.json`
-(Google creds). The Render DB is **already migrated + seeded** — steps 3–4 are only for a fresh DB.
+**Prereqs in place:** `.env` (Render `DATABASE_URL` + `SESSION_SECRET`), `spike/service-account-key.json` (Google creds).
+The Render DB is already migrated + seeded — steps 3–4 are only for a fresh DB.
 
 ```bash
 # from repo root (Windows paths; .venv already exists)
-.venv/Scripts/python.exe -m pip install -r requirements.txt         # 1. deps
-.venv/Scripts/python.exe -c "import app.main; print('imports OK')"   # 2. sanity
-.venv/Scripts/alembic.exe -c alembic.ini upgrade head               # 3. migrate (head = d83e4b664737)
-# 4. seed (fresh DB only, in this order):
+.venv/Scripts/python.exe -m pip install -r requirements.txt          # 1. deps (incl. openpyxl)
+.venv/Scripts/python.exe -c "import app.main; print('imports OK')"    # 2. sanity
+.venv/Scripts/alembic.exe -c alembic.ini upgrade head                # 3. migrate (head = d83e4b664737)
+# 4. seed (fresh DB only, IN THIS ORDER — colour_trucks needs trucks+colours):
 .venv/Scripts/python.exe -m scripts.seed_owner
 .venv/Scripts/python.exe -m scripts.seed_crew
 .venv/Scripts/python.exe -m scripts.seed_trucks
@@ -233,13 +197,14 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 .venv/Scripts/python.exe -m scripts.seed_colour_trucks
 .venv/Scripts/python.exe -m scripts.seed_disposal
 .venv/Scripts/python.exe -m scripts.seed_surcharges
+# (customers are imported, not seeded: python -m scripts.import_customers "Victoria Customers.xlsx" --apply)
 # 5. run
-.venv/Scripts/python.exe -m uvicorn app.main:app                    # http://127.0.0.1:8000/app  (login) · /health
+.venv/Scripts/python.exe -m uvicorn app.main:app                     # http://127.0.0.1:8000/app · /health
 ```
 
-Login for the demo: **Manager (demo) / PIN 1111** or **Wes (owner) / PIN 4321**.
-Preview config: `.claude/launch.json` (server name `api`).
+Login: **Manager / 1111** or **Wes (owner) / 4321**. In browser tests, the owner hub's second gate (owner password + sim
+2FA) can be skipped by calling `unlock()`; prefer the API for auth (`POST /auth/login {pin, brand}` sets the cookie).
 
-**Safety confirmed still in place:** calendar guard in `app/integrations/gcal.py` (+ `/spike`) refuses the two live
-calendar IDs and writes only to the TEST calendar; `.gitignore` protects `.env`, `**/service-account-key.json`,
-`**/.venv/`, `spike/out/`.
+**Safety still in place (confirmed this session):** the `app/integrations/gcal.py` guard refuses the two live calendar IDs
+and writes only to the configured TEST + reminder calendars; `.gitignore` protects `.env`, the service-account key, and
+customer PII exports.
