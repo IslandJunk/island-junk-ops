@@ -66,6 +66,26 @@
   }
   applyRateSheet();
 
+  // ── Retire the baked-in demo customers once real ones are injected ─────────────
+  // QB_CUST (4 residential) + QB_COMM (5 commercial) are const demo arrays the prototype
+  // concats with the real data. Empty them in place so only the imported customers show.
+  // Guarded: only when real data is present, so an empty brand keeps its demo. Setting the
+  // comm-seeded flag stops commLoad() from merging QB_COMM back in (which would also sync it).
+  function retireDemoCustomers() {
+    try {
+      var res = JSON.parse(localStorage.getItem("ij_customers_v1") || "[]");
+      if (Array.isArray(res) && res.length && typeof QB_CUST !== "undefined" && Array.isArray(QB_CUST)) {
+        QB_CUST.length = 0;
+      }
+      var co = JSON.parse(localStorage.getItem("ij_company_customers_v1") || "[]");
+      if (Array.isArray(co) && co.length && typeof QB_COMM !== "undefined" && Array.isArray(QB_COMM)) {
+        QB_COMM.length = 0;
+        try { localStorage.setItem("ij_comm_seeded_v1", "1"); } catch (e) {}
+      }
+    } catch (e) {}
+  }
+  retireDemoCustomers();
+
   function ymd(d) {
     try {
       var x = (d instanceof Date) ? d : new Date(d);

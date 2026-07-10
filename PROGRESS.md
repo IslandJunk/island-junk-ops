@@ -97,10 +97,10 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 
 ## 2. IN FLIGHT (loose ends, nothing mid-edit)
 
-- **QuickBooks demo-const suppression.** Real customers are imported + served, but the booking screen's hardcoded `QB_CUST`
-  (4 residential) + `QB_COMM` (5 commercial) demo **consts** still concat with the injected real data — fully
-  retiring them needs a booking-screen/bridge edit (they're `const`, so a localStorage ref can't override them).
-  Low priority now that 2,997 real customers dominate the lists.
+- ~~**QuickBooks demo-const suppression**~~ **RESOLVED (2026-07):** `booking-bridge.js::retireDemoCustomers` empties the
+  const `QB_CUST` (4) + `QB_COMM` (5) demo arrays in place once real customers are injected, and sets `ij_comm_seeded_v1`
+  so `commLoad()` never merges the demo back (which would also sync it). Browser-verified: only the 2,173 residential +
+  824 company real customers show, no demo merged into localStorage or the DB.
 - **Yard waste-class picker still hardcoded** — the disposal cost model is live, but the yard-processing screen's
   `WASTE_CLASSES` list (13 labels) is still a hardcoded array that *overlaps but ≠* `disposal_material.m` (24 rows).
   The compute reconciles the two via `WASTE_CLASS_ALIAS` + whitespace normalization, but two picker labels have **no
