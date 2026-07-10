@@ -10,6 +10,54 @@
 (function () {
   var ACCT = { collect: "residential", invoiced: "commercial", contracts: "commercial", pallet: "commercial", pm: "property_mgmt" };
 
+  // ── Wire the booking's hardcoded rates to the owner's saved rate sheet ──────────
+  // The prototype bakes in residential load prices (const RES) and bin base/surcharges
+  // (binBase / binSurFor). Point them at the injected ij_rates_v1 so an owner's rate-sheet
+  // edits flow through to booking estimates. RES is a const object — we mutate its props
+  // (allowed); binBase/binSurFor are functions we override. Runs once at load, before the
+  // user opens a lane (collectFlowHTML rebuilds from RES each time; bin math calls the fns).
+  function applyRateSheet() {
+    var R;
+    try { R = JSON.parse(localStorage.getItem("ij_rates_v1") || "null"); } catch (e) { return; }
+    if (!R) return;
+    try {
+      if (typeof RES !== "undefined" && RES) {
+        if (R.residentialLoads) {
+          RES.loads = ["1/8", "1/4", "1/3", "1/2", "2/3", "3/4", "7/8", "full"]
+            .filter(function (k) { return R.residentialLoads[k] != null; })
+            .map(function (k) { return [k, R.residentialLoads[k]]; });
+        }
+        if (R.residentialMin) {
+          RES.min = [R.residentialMin.low, R.residentialMin.mid, R.residentialMin.high]
+            .filter(function (v) { return v != null; });
+        }
+        if (R.labourRate != null) RES.labour = R.labourRate;
+        if (R.gstPct != null) RES.gst = R.gstPct / 100;
+        if (R.parking && R.parking.chargeHr != null) RES.parkHr = R.parking.chargeHr;
+        if (Array.isArray(R.items) && R.items.length) {
+          RES.items = R.items.map(function (it) {
+            return {
+              id: String(it.n || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+              nm: it.n, price: +it.price || 0, unit: it.unit || "each",
+            };
+          });
+        }
+      }
+      var bin = R.bin || {};
+      window.binBase = function (bt) {
+        return bt === "Roofing" ? (bin.roofingBase != null ? bin.roofingBase : 250)
+                                : (bin.base != null ? bin.base : 225);
+      };
+      if (R.surcharges) {
+        window.binSurFor = function (bt, town) {
+          var map = (bt === "Roofing" && R.roofingSurcharges) ? R.roofingSurcharges : R.surcharges;
+          return (town in map) ? map[town] : null;   // area not on the sheet => call for quote
+        };
+      }
+    } catch (e) {}
+  }
+  applyRateSheet();
+
   function ymd(d) {
     try {
       var x = (d instanceof Date) ? d : new Date(d);

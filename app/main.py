@@ -65,7 +65,7 @@ _HUB_REFS = ["ij_employees_v1", "ij_fleet_v1", "ij_colourmap_v1", "ij_bins_v1"]
 # slug -> {file, refs keys injected from DB, optional bridge}. The Main Hub launcher
 # navigates here (its go() is remapped by main-hub-bridge.js).
 SCREENS: dict[str, dict] = {
-    "new-booking":     {"file": "island-junk-new-booking-v67.html", "keys": _DISPATCH_REFS + _CUSTOMER_REFS, "bridge": "booking-bridge.js"},
+    "new-booking":     {"file": "island-junk-new-booking-v67.html", "keys": _DISPATCH_REFS + _CUSTOMER_REFS + ["ij_rates_v1"], "bridge": "booking-bridge.js"},
     "day-board":       {"file": "island-junk-day-board-v28.html",   "keys": _DISPATCH_REFS, "bridge": "day-board-bridge.js"},
     "bin-registry":    {"file": "island-junk-bin-registry-v6.html", "keys": ["ij_bins_v1"], "bridge": None},
     "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1"], "bridge": None},

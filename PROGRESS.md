@@ -188,8 +188,11 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
 - **Refs vs sync:** refs inject inline in `<head>` (synchronous, before prototype scripts → no echo); `sync-bridge.js`
   overrides `localStorage.setItem` at end of `<body>` → only *user* writes sync. `reference_bootstrap_script` skips a
   builder returning `None` (no half-empty blobs that break a screen).
-- **Booking calc uses a hardcoded `RES` constant, NOT `ij_rates_v1`** — real rates only reach the *crew calculators* +
-  contracts, not the booking screen's residential calc.
+- ~~**Booking calc uses a hardcoded `RES` constant**~~ **RESOLVED (2026-07):** `booking-bridge.js::applyRateSheet` now
+  mutates the prototype's `RES` (residential loads/min/labour/GST/parking/items) and overrides `binBase`/`binSurFor` from
+  the injected `ij_rates_v1` (added to the new-booking screen's ref keys). Owner rate-sheet edits flow to booking estimates
+  — browser-verified live (DB full-load 650→700 & Oak Bay surcharge 10→20 showed in the booking, then tracked back on
+  restore). Crew calculators already read `ij_rates_v1`.
 - **Day board truck lanes** come from `ij_fleet_v1` + `ij_colourmap_v1` (injected from DB) — colour→truck must map to real
   fleet numbers or jobs land on lanes that don't render.
 - **Every calendar test creates real TEST-calendar events — always delete them by id afterward.** The guard
