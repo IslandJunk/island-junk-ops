@@ -43,6 +43,14 @@
           });
         }
       }
+      // commercial lane load prices + included minutes (const COMM.loads = [[key,price,incMin]])
+      if (typeof COMM !== "undefined" && COMM && R.commercialLoads) {
+        var im = R.commercialIncludedMin || {};
+        COMM.loads = ["min", "1/8", "1/4", "1/3", "1/2", "2/3", "3/4", "7/8", "full"]
+          .filter(function (k) { return R.commercialLoads[k] != null; })
+          .map(function (k) { return [k, R.commercialLoads[k], im[k] != null ? im[k] : 0]; });
+        if (R.labourRate != null) COMM.labour = R.labourRate;
+      }
       var bin = R.bin || {};
       window.binBase = function (bt) {
         return bt === "Roofing" ? (bin.roofingBase != null ? bin.roofingBase : 250)
