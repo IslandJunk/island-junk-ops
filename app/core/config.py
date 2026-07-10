@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     # Verify inbound Twilio webhook signatures when set (the request URL's public base).
     twilio_validate_signatures: bool = False
 
+    # ── Square (payment LINKS only — the app never charges a card, §2/§3) ─────
+    # Secrets in .env; absent → dry-run (returns a placeholder link, calls nothing).
+    square_access_token: str | None = None
+    square_location_id: str | None = None
+    square_environment: str = "sandbox"      # "sandbox" | "production"
+
+    # ── Dropbox (auto-file job photos; TEST folder first, §4/§10) ─────────────
+    dropbox_access_token: str | None = None      # or a refresh-token flow later
+    dropbox_root: str = "/Island Junk TEST"      # never the live photo tree until go-live
+
     @property
     def is_db_configured(self) -> bool:
         return bool(self.database_url)
@@ -58,6 +68,14 @@ class Settings(BaseSettings):
     def is_sms_configured(self) -> bool:
         """True only when the app can actually SEND (account creds + the updates line)."""
         return bool(self.twilio_account_sid and self.twilio_auth_token and self.twilio_updates_line)
+
+    @property
+    def is_square_configured(self) -> bool:
+        return bool(self.square_access_token and self.square_location_id)
+
+    @property
+    def is_dropbox_configured(self) -> bool:
+        return bool(self.dropbox_access_token)
 
 
 settings = Settings()

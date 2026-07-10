@@ -15,6 +15,7 @@ from app.api.booking import router as booking_router
 from app.api.customers import router as customers_router
 from app.api.day_board import router as day_board_router
 from app.api.disposal import router as disposal_router
+from app.api.integrations import router as integrations_router
 from app.api.invoicing import router as invoicing_router
 from app.api.reminders import router as reminders_router
 from app.api.sms import router as sms_router
@@ -32,6 +33,7 @@ app.include_router(booking_router)
 app.include_router(customers_router)
 app.include_router(day_board_router)
 app.include_router(disposal_router)
+app.include_router(integrations_router)
 app.include_router(invoicing_router)
 app.include_router(reminders_router)
 app.include_router(sms_router)

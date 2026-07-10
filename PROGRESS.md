@@ -135,8 +135,16 @@ absent creds → **dry-run** (composes + logs, never sends), activates when Wes 
   Nanaimo → 778-977-5865, unknown → both (matched by last-10-digits against the customer tables). Every message logged.
 - **Endpoints:** `POST /sms/inbound` (Twilio webhook → TwiML, optional signature validation), `POST /sms/send`
   (owner/manager; composes server-side by `kind` so the brand/no-card rules can't be bypassed), `GET /sms/status`,
-  `GET /sms/log`. Verified end-to-end in dry-run (webhook TwiML, opt-out/opt-in, dry-run compose+log). **Square + Dropbox
-  are the remaining integrations.**
+  `GET /sms/log`. Verified end-to-end in dry-run (webhook TwiML, opt-out/opt-in, dry-run compose+log).
+
+**Square + Dropbox integrations — BUILT (dry-run until creds)** — same creds-gated pattern, no new tables (stateless
+wrappers via `httpx`):
+- **Square** (`app/integrations/square_pay.py`, `POST /square/payment-link` owner/manager, `GET /square/status`) — creates
+  a Square hosted **payment LINK** for a job amount; there is deliberately **no charge/refund call** anywhere (§2/§3 —
+  the app never charges). Dollars → cents, CAD, sandbox/production via `.env`. Dry-run returns a placeholder.
+- **Dropbox** (`app/integrations/dropbox_files.py`, `POST /dropbox/job-photo`, `GET /dropbox/status`) — auto-files a job
+  photo (data-URL from the crew form) into a **per-job folder under the configured TEST root**; every upload asserts the
+  path is inside `dropbox_root` (guard verified to refuse an outside path, §2/§4). Dry-run uploads nothing.
 
 **Punch-time calendar mirror — LIVE** (migration `a5abfdbdebfc` adds `clock_punch.gcal_event_id`) — Wes shared the
 "PUNCH TIME - TEST" calendar (`c_1033bcf8…`) with the service account (writer). `apply_clock` now mirrors each punch to
@@ -273,13 +281,16 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` + **`ij_yard_clock_v1`** (both feed the authoritative
    `ij_clock_log`, which now also mirrors to the punch calendar — the yard clock-out already pushes into `ij_clock_log`),
    `ij_signin_log_v1` (the `AuthSession` table is the authoritative sign-in record).
-3. **Integrations** — **Twilio SMS BUILT** (dry-run until Wes adds creds to `.env`: `twilio_account_sid`,
-   `twilio_auth_token`; the updates line `+17789065865` is pre-set — change via `.env` if the real number differs; then
-   set the Twilio Messaging webhook to `POST <public-base>/sms/inbound` and optionally `twilio_validate_signatures=true`).
-   **Remaining:** **Square** (payment links on the job — surface only, never auto-charge §2) and **Dropbox** (auto-file
-   job photos per job, TEST folder first) — both need creds, same creds-gated pattern. Outbound SMS triggers still to wire
-   into the client flows (on-our-way / ETA / completion buttons call `POST /sms/send`); booking-confirm auto-send wired
-   server-side. No A2P 10DLC for the local CA number.
+3. **Integrations — ALL THREE BUILT (dry-run until creds).** To activate, Wes adds creds to `.env`:
+   - **Twilio SMS:** `twilio_account_sid`, `twilio_auth_token` (updates line `+17789065865` pre-set — change via `.env` if
+     the real number differs); set the Twilio Messaging webhook to `POST <public-base>/sms/inbound`; optionally
+     `twilio_validate_signatures=true`. No A2P 10DLC (CA local number).
+   - **Square:** `square_access_token`, `square_location_id`, `square_environment=production`. Payment links only, never charges.
+   - **Dropbox:** `dropbox_access_token` (leave `dropbox_root=/Island Junk TEST` until go-live).
+   **Remaining wiring (client-side, no creds needed):** outbound SMS triggers on the client flows (on-our-way / next-ETA /
+   completion buttons → `POST /sms/send`; booking-confirm already auto-sends server-side); a Square-link button on the
+   residential-bin invoice / job; the crew forms POSTing photos to `/dropbox/job-photo` on save. All are small bridge
+   additions once Wes wants them live.
 4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced).
    **Trucks + colour map now syncable — DONE this session too** (`apply_fleet`/`apply_colourmap`, status colours protected).
    Follow-ups: respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar
