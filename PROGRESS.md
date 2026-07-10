@@ -131,14 +131,15 @@ inline as `localStorage` before each page's scripts run, and per-screen "bridges
   + xlsx support + phone normalization; imported 2,173 residential / 824 company. Residual: a handful of tokenless
   businesses may land in residential — the owner can fix in-app. To re-classify wholesale later, clear `src='qb'` rows and
   re-import (dedupe skips existing, so it won't reclassify in place).
-- **CC-charge reminder — BUILT incl. calendar mirror (2026-07):** 48h = 2 working days, invoice-triggered (above). The
-  **off-board Google reminder-calendar mirror is now built** — Wes provided the calendar id
-  (`c_139129…@group.calendar.google.com`, in `config.google_reminder_calendar_id`). A new CC-charge reminder creates an
-  all-day Flamingo event on the due date; marking it paid recolours it **purple/Grape** (`app/integrations/gcal.py`
-  `create/recolor/delete_reminder_event`, guarded to that calendar ONLY — dispatch + TEST calendars hard-refused).
-  **⚠ ACTION: the reminder calendar must be SHARED with the service account** `ij-calendar-spike@island-junk-spike.iam.gserviceaccount.com`
-  ("Make changes to events") — until then the mirror **skips gracefully** (reminder still saves in-DB, `gcal_event_id` null;
-  back-fill script TODO for any created while unshared). Still needs a UI "start 48h clock" button at invoice time.
+- **CC-charge reminder — LIVE incl. calendar mirror + VERIFIED (2026-07):** 48h = 2 working days, invoice-triggered (above).
+  The **off-board Google reminder-calendar mirror is live** — calendar "CC Charge Reminders"
+  (`c_139129…@group.calendar.google.com`, in `config.google_reminder_calendar_id`) is now **shared with the service account**
+  `ij-calendar-spike@island-junk-spike.iam.gserviceaccount.com`. A new CC-charge reminder creates an all-day **Flamingo**
+  event on the due date; marking it paid (`POST /reminders/{id}/done`) recolours it **purple/Grape** (colorId 3).
+  `app/integrations/gcal.py` `create/recolor/delete_reminder_event` are guarded to that calendar ONLY (dispatch + TEST
+  hard-refused, both directions). **Verified end-to-end on the real calendar** (create→Flamingo, paid→purple, delete; test
+  event removed). Mirror is best-effort (reminder saves in-DB even if the calendar is unreachable). Still needs a UI
+  "start 48h clock" button at invoice time; if a reminder is ever created while the calendar is down, a back-fill is TODO.
 - *Resolved this session (in docs/data-model.md):* Flamingo = residential unpaid (CC **or** e-transfer), status-only;
   bin truck = Graphite/Blueberry; Tomato→Flamingo lifecycle; 7 booking lanes; merged bin lifecycle enum; dispatch
   `truck` table separate from a future maintenance `vehicle` table.
