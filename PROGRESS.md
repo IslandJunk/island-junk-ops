@@ -1,5 +1,15 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-10 (session 3)** — Finished the **rest of field/dispatch persistence** (§3 NEXT #1): the **day-board crew
+overlays** (`ij_dayboard_status/notes/sitelog_v1` — status override, crew note, on-site log, all keyed by calendar
+event id), **attendance** (`ij_attendance_v1`) + **breaks** (`ij_breaks_v1`), and the office **day notes**
+(`ij_daynotes_v1`) + long-out **threshold config** (`ij_binsout_cfg_v1`, in a new generic `brand_setting` KV). 5 new
+tables (migration `84b98fe168ce`). Caught + fixed a concurrency bug on the way: the three day-board overlays share one
+`(brand, event_id)` row, so two near-simultaneous crew writes raced on the unique constraint and one was lost — now an
+atomic Postgres `ON CONFLICT` upsert. Verified end-to-end (API + client `setStatus`/`setNote` path + reconcile-clear).
+Also gave Wes the steps to share the new **punch-time test calendar** with the service account (mirror wiring queued
+until it's shared). Integrations still last, per Wes.
+
 **2026-07-10 (session 2)** — Persisted the **bin-tracker driver tool** (§3.1 NEXT #1's headline piece — it was the last
 big in-memory-only screen). Two parts: **(A)** the driver's own outputs now save — the whole driver day (`ij_binday_v1`),
 field bin weights (`ij_tares_v1` / `ij_weighins_v1`), and the morning gear-check log (`ij_tooldaily_v1`) — plus a fix so
@@ -20,7 +30,7 @@ attendance), the external integrations (Twilio/Square/Dropbox — need creds), a
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree at the bin-tracker-persistence handoff commit, Alembic head **`44049978642e`**
+**Repo state:** clean working tree at the field/dispatch-persistence handoff commit, Alembic head **`84b98fe168ce`**
 (migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
 PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
 restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
@@ -81,6 +91,22 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
   Browser-proven: real 75-bin fleet loads (16-04 shows DB state, not the seed's demo rental), a pull-to-maintenance +
   repair note synced to the DB and survived a reload; lean registry/yard write path also re-verified via API.
 
+**Field/dispatch persistence — day-board overlays + attendance/breaks + office notes/config (COMPLETE)** — migration
+`84b98fe168ce` (5 tables):
+- **`dayboard_overlay`** (one row per brand+calendar-event-id) collapses the three day-board crew overlays:
+  `ij_dayboard_status_v1` (status override), `ij_dayboard_notes_v1` (crew note), `ij_dayboard_sitelog_v1`
+  (`{start,finish,loc}`). Notes + sitelog **reconcile-clear on absence** (the prototype deletes the key when emptied;
+  the injected full set makes the device authoritative); status is grow-only. Because 3 sync keys write the SAME row,
+  the upsert is an **atomic `ON CONFLICT`** (`_overlay_upsert`) — a plain select-then-insert raced + dropped a column
+  when two overlays were set in the same 400 ms debounce window.
+- **`attendance`** (`ij_attendance_v1` → row per brand+date+name; status/note/lateTime) and **`break_log`**
+  (`ij_breaks_v1` → row per brand+name+date; verbatim doc + `total_minutes` lifted out). Upsert-only (permanent HR).
+- **`day_note`** (`ij_daynotes_v1` → row per brand+date; bin/yard/handson columns, **per-shift present-key** so a hub
+  setting one shift never blanks the others) and **`brand_setting`** (generic brand KV; homes `ij_binsout_cfg_v1` =
+  `{days}` and future 1-off settings).
+- Injected on the screens that read them: day-board (overlays), owner/manager hubs (attendance/breaks/daynotes/binsout),
+  bin-tracker + truck-hub + yard-hub (daynotes), employee-hours (breaks), bin-registry (binsout). All None-until-data.
+
 **Disposal cost model**
 - `scripts/seed_disposal.py`: 7 facilities + **26 materials** (24 + 2 empty editable spots) + rate history.
 - `app/yard/disposal.py::compute_load_margin`: charge = waste-class price × net tonnes; cost = the class's own cost, or
@@ -136,13 +162,17 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
 
 ## 3. NEXT (in order)
 
-1. **Field/dispatch persistence (bin-tracker DONE this session)** — remaining: day-board crew overlays
-   (`ij_dayboard_status/notes/sitelog_v1`), breaks (`ij_breaks_v1`) + attendance (`ij_attendance_v1`), and the office
-   **day notes** (`ij_daynotes_v1`, written by the owner/yard/truck hubs — the bin-tracker only reads it) + the long-out
-   threshold config (`ij_binsout_cfg_v1`, a 1-field brand setting edited in the owner/management hubs; best folded into a
-   settings table). The bin-tracker's shared punch mirror (`ij_punches_v1`) and its device-local day-board handoff
-   (`ij_active_day_v1`) were **intentionally left unpersisted** — the authoritative clock record already syncs via
-   `ij_clock_log`, and the handoff is ephemeral per-device state. Same model→migration→sync-handler→ref pattern.
+1. **Field/dispatch persistence — DONE** (bin-tracker in session 2; day-board overlays + attendance/breaks + day
+   notes/config in session 3). The bin-tracker's shared punch mirror (`ij_punches_v1`) and its device-local day-board
+   handoff (`ij_active_day_v1`) were **intentionally left unpersisted** — the authoritative clock record already syncs
+   via `ij_clock_log`, and the handoff is ephemeral per-device state.
+   - **Remaining sub-item: the punch-time calendar mirror.** Wes created a dedicated **punch-time TEST calendar**
+     (`c_1033bcf8590acc0d57229b30e59d0169c4211883dd51ad18acb15476cc0193aa@group.calendar.google.com`) to mirror clock
+     in/out onto a Google Calendar. **Blocked on sharing:** share it (writer / "Make changes to events") with the
+     service account `ij-calendar-spike@island-junk-spike.iam.gserviceaccount.com` (checked 2026-07-10 → 404, not shared
+     yet). Then wire `google_punch_calendar_id` into config + a `_assert_punch_calendar` guard (live dispatch calendars
+     stay hard-refused) + a graceful `punch_calendar_accessible()` skip (mirror the CC-charge reminder pattern), and
+     confirm with Wes whether he wants **one event per punch** or **one per-day hours event**.
 2. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
    payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number.

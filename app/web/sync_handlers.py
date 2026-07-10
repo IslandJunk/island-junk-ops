@@ -12,14 +12,17 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session as DbSession
 
 from app.auth.guards import is_owner
 from app.auth.security import hash_pin
 from app.customers.qb_import import company_key, residential_key
+from app.models.attendance import Attendance, BreakLog
 from app.models.bin_field import BinDriverDay, BinWeigh, ToolDailyLog
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
+from app.models.dayboard import DayboardOverlay
 from app.models.contract import Contract
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
 from app.models.employee import Employee
@@ -32,6 +35,7 @@ from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
 from app.models.reminder import Reminder
+from app.models.settings import BrandSetting, DayNote
 from app.models.weigh import WeighLog
 from app.models.yard_processing import YardProcessing
 
@@ -450,6 +454,170 @@ def apply_yard_processing(db: DbSession, brand: Brand, records, actor: Employee)
         saved += 1
     db.commit()
     return {"saved": saved}
+
+
+def _overlay_upsert(db: DbSession, brand: Brand, event_id: str, col: str, value) -> None:
+    """Atomically set ONE column of the shared (brand, event_id) overlay row. Uses Postgres
+    ON CONFLICT so the three overlay handlers (status/note/sitelog) can create the same row
+    concurrently without one insert losing to the other's unique-constraint collision."""
+    stmt = pg_insert(DayboardOverlay).values(brand=brand, event_id=event_id, **{col: value})
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["brand", "event_id"], set_={col: getattr(stmt.excluded, col)})
+    db.execute(stmt)
+
+
+def apply_dayboard_status(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_dayboard_status_v1` = {event_id: status} — crew status override per stop.
+    Grow-only (the prototype never clears a status)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    n = 0
+    for eid, st in data.items():
+        if not eid:
+            continue
+        _overlay_upsert(db, brand, str(eid), "status", st or None)
+        n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def apply_dayboard_notes(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_dayboard_notes_v1` = {event_id: note}. The prototype deletes the key when a note
+    is emptied, so we reconcile: a note in the DB but absent from the present dict is cleared
+    (the injected full set makes the device's dict authoritative)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    seen, n = set(), 0
+    for eid, note in data.items():
+        if not eid:
+            continue
+        eid = str(eid)
+        seen.add(eid)
+        _overlay_upsert(db, brand, eid, "note", (str(note).strip() or None) if note else None)
+        n += 1
+    cleared = 0
+    for row in db.scalars(select(DayboardOverlay).where(
+            DayboardOverlay.brand == brand, DayboardOverlay.note.isnot(None))).all():
+        if row.event_id not in seen:
+            row.note, cleared = None, cleared + 1
+    db.commit()
+    return {"upserted": n, "cleared": cleared}
+
+
+def apply_dayboard_sitelog(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_dayboard_sitelog_v1` = {event_id: {start,finish,loc}}. Reconcile-clear absent
+    (deleted-on-empty, same as notes)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    seen, n = set(), 0
+    for eid, log in data.items():
+        if not eid or not isinstance(log, dict):
+            continue
+        eid = str(eid)
+        seen.add(eid)
+        _overlay_upsert(db, brand, eid, "sitelog", log or None)
+        n += 1
+    cleared = 0
+    for row in db.scalars(select(DayboardOverlay).where(
+            DayboardOverlay.brand == brand, DayboardOverlay.sitelog.isnot(None))).all():
+        if row.event_id not in seen:
+            row.sitelog, cleared = None, cleared + 1
+    db.commit()
+    return {"upserted": n, "cleared": cleared}
+
+
+def apply_attendance(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_attendance_v1` = {date: {name: {status, note, lateTime}}}. Upsert per (date, name);
+    permanent HR record (no delete-by-absence)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    n = 0
+    for d, people in data.items():
+        wd = _pdate(d)
+        if wd is None or not isinstance(people, dict):
+            continue
+        for name, rec in people.items():
+            name = (name or "").strip()
+            if not name or not isinstance(rec, dict):
+                continue
+            row = db.scalar(select(Attendance).where(
+                Attendance.brand == brand, Attendance.work_date == wd, Attendance.employee_name == name))
+            if row is None:
+                row = Attendance(brand=brand, work_date=wd, employee_name=name)
+                db.add(row)
+            row.status = rec.get("status") or None
+            row.note = rec.get("note") or None
+            row.late_time = rec.get("lateTime") or None
+            n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def apply_breaks(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_breaks_v1` = {name: {iso: rec}}. Upsert per (name, date), record kept verbatim,
+    `total` minutes lifted out for the owner's hours math."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    n = 0
+    for name, days in data.items():
+        name = (name or "").strip()
+        if not name or not isinstance(days, dict):
+            continue
+        for iso, rec in days.items():
+            wd = _pdate(iso)
+            if wd is None or not isinstance(rec, dict):
+                continue
+            row = db.scalar(select(BreakLog).where(
+                BreakLog.brand == brand, BreakLog.employee_name == name, BreakLog.work_date == wd))
+            if row is None:
+                row = BreakLog(brand=brand, employee_name=name, work_date=wd, doc=rec)
+                db.add(row)
+            else:
+                row.doc = rec
+            row.total_minutes = _int(rec.get("total"))
+            n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def apply_daynotes(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_daynotes_v1` = {date: {bin, yard, handson}}. Upsert per date; per-shift present-key
+    only (a hub that sets one shift never blanks the others)."""
+    if not isinstance(data, dict):
+        return {"upserted": 0}
+    n = 0
+    for d, rec in data.items():
+        wd = _pdate(d)
+        if wd is None or not isinstance(rec, dict):
+            continue
+        row = db.scalar(select(DayNote).where(DayNote.brand == brand, DayNote.note_date == wd))
+        if row is None:
+            row = DayNote(brand=brand, note_date=wd)
+            db.add(row)
+        for shift in ("bin", "yard", "handson"):
+            if shift in rec:
+                setattr(row, shift, (str(rec[shift]).strip() or None) if rec[shift] else None)
+        n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def _apply_setting(db: DbSession, brand: Brand, key: str, data) -> dict:
+    """Upsert a small brand setting (`brand_setting`) verbatim."""
+    if data is None:
+        return {"saved": False}
+    row = db.scalar(select(BrandSetting).where(BrandSetting.brand == brand, BrandSetting.key == key))
+    if row is None:
+        db.add(BrandSetting(brand=brand, key=key, value=data))
+    else:
+        row.value = data
+    db.commit()
+    return {"saved": True, "key": key}
+
+
+def apply_binsout_cfg(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_binsout_cfg_v1` = {days: n} — the long-out-rental threshold. -> brand_setting."""
+    return _apply_setting(db, brand, "ij_binsout_cfg_v1", data)
 
 
 def apply_maint(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
@@ -944,6 +1112,13 @@ HANDLERS = {
     "ij_tares_v1": apply_tares,
     "ij_weighins_v1": apply_weighins,
     "ij_tooldaily_v1": apply_tooldaily,
+    "ij_dayboard_status_v1": apply_dayboard_status,
+    "ij_dayboard_notes_v1": apply_dayboard_notes,
+    "ij_dayboard_sitelog_v1": apply_dayboard_sitelog,
+    "ij_attendance_v1": apply_attendance,
+    "ij_breaks_v1": apply_breaks,
+    "ij_daynotes_v1": apply_daynotes,
+    "ij_binsout_cfg_v1": apply_binsout_cfg,
     "ij_maint_v2": apply_maint,
     "ij_fixes_v1": apply_fixes,
     "ij_fixes_resolved_v1": apply_fixes_resolved,

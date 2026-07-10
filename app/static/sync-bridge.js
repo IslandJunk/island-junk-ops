@@ -11,7 +11,9 @@
     ij_bins_v1: 1, ij_employees_v1: 1, ij_incidents_v1: 1, ij_clock_log: 1, ij_jobs_v1: 1, ij_weighlog_v1: 1,
     ij_maint_v2: 1, ij_fixes_v1: 1, ij_fixes_resolved_v1: 1, ij_reminders_v1: 1, ij_rates_v1: 1,
     ij_customers_v1: 1, ij_company_customers_v1: 1, ij_pm_db_v2: 1, ij_contracts_v1: 1,
-    ij_binday_v1: 1, ij_tares_v1: 1, ij_weighins_v1: 1, ij_tooldaily_v1: 1
+    ij_binday_v1: 1, ij_tares_v1: 1, ij_weighins_v1: 1, ij_tooldaily_v1: 1,
+    ij_dayboard_status_v1: 1, ij_dayboard_notes_v1: 1, ij_dayboard_sitelog_v1: 1,
+    ij_attendance_v1: 1, ij_breaks_v1: 1, ij_daynotes_v1: 1, ij_binsout_cfg_v1: 1
   };
   var timers = {};
   var orig = localStorage.setItem.bind(localStorage);

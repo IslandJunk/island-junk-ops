@@ -15,9 +15,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.auth.guards import is_owner
+from app.models.attendance import Attendance, BreakLog
 from app.models.bin_field import BinWeigh
 from app.models.bins import Bin
 from app.models.clock import ClockPunch
+from app.models.dayboard import DayboardOverlay
 from app.models.colour_map import ColourMap
 from app.models.contract import Contract
 from app.models.customer import CompanyCustomer, PmBuilding, PmCompany, PmGroup, ResidentialCustomer
@@ -28,6 +30,7 @@ from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, RateCard
 from app.models.reminder import Reminder
+from app.models.settings import BrandSetting, DayNote
 from app.models.truck import Truck
 from app.models.weigh import WeighLog
 
@@ -371,6 +374,76 @@ def build_pm_db_v2(db: DbSession, brand: Brand) -> list | None:
     return out
 
 
+def build_dayboard_status_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_dayboard_status_v1` = {event_id: status}. None until any exist."""
+    rows = db.scalars(select(DayboardOverlay).where(
+        DayboardOverlay.brand == brand, DayboardOverlay.status.isnot(None))).all()
+    return {r.event_id: r.status for r in rows} or None
+
+
+def build_dayboard_notes_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_dayboard_notes_v1` = {event_id: note}. None until any exist."""
+    rows = db.scalars(select(DayboardOverlay).where(
+        DayboardOverlay.brand == brand, DayboardOverlay.note.isnot(None))).all()
+    return {r.event_id: r.note for r in rows} or None
+
+
+def build_dayboard_sitelog_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_dayboard_sitelog_v1` = {event_id: {start,finish,loc}}. None until any exist."""
+    rows = db.scalars(select(DayboardOverlay).where(
+        DayboardOverlay.brand == brand, DayboardOverlay.sitelog.isnot(None))).all()
+    return {r.event_id: r.sitelog for r in rows} or None
+
+
+def build_attendance_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_attendance_v1` = {date: {name: {status, note, lateTime}}}. None until any exist."""
+    rows = db.scalars(select(Attendance).where(Attendance.brand == brand)).all()
+    if not rows:
+        return None
+    out: dict[str, dict] = {}
+    for r in rows:
+        rec: dict = {}
+        if r.status is not None:
+            rec["status"] = r.status
+        if r.note is not None:
+            rec["note"] = r.note
+        if r.late_time is not None:
+            rec["lateTime"] = r.late_time
+        out.setdefault(r.work_date.isoformat(), {})[r.employee_name] = rec
+    return out
+
+
+def build_breaks_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_breaks_v1` = {name: {iso: rec}}. None until any exist."""
+    rows = db.scalars(select(BreakLog).where(BreakLog.brand == brand)).all()
+    if not rows:
+        return None
+    out: dict[str, dict] = {}
+    for r in rows:
+        out.setdefault(r.employee_name, {})[r.work_date.isoformat()] = r.doc
+    return out
+
+
+def build_daynotes_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_daynotes_v1` = {date: {bin, yard, handson}}. None until any exist."""
+    rows = db.scalars(select(DayNote).where(DayNote.brand == brand)).all()
+    if not rows:
+        return None
+    out: dict[str, dict] = {}
+    for r in rows:
+        rec = {k: v for k, v in (("bin", r.bin), ("yard", r.yard), ("handson", r.handson)) if v is not None}
+        if rec:
+            out[r.note_date.isoformat()] = rec
+    return out or None
+
+
+def build_binsout_cfg_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_binsout_cfg_v1` = {days: n}. None until set (prototype defaults to 14)."""
+    row = db.scalar(select(BrandSetting).where(
+        BrandSetting.brand == brand, BrandSetting.key == "ij_binsout_cfg_v1"))
+    return row.value if (row and isinstance(row.value, dict)) else None
+
+
 _BUILDERS = {
     "ij_fleet_v1": build_fleet_v1,
     "ij_colourmap_v1": build_colourmap_v1,
@@ -387,6 +460,13 @@ _BUILDERS = {
     "ij_customers_v1": build_customers_v1,
     "ij_company_customers_v1": build_company_customers_v1,
     "ij_pm_db_v2": build_pm_db_v2,
+    "ij_dayboard_status_v1": build_dayboard_status_v1,
+    "ij_dayboard_notes_v1": build_dayboard_notes_v1,
+    "ij_dayboard_sitelog_v1": build_dayboard_sitelog_v1,
+    "ij_attendance_v1": build_attendance_v1,
+    "ij_breaks_v1": build_breaks_v1,
+    "ij_daynotes_v1": build_daynotes_v1,
+    "ij_binsout_cfg_v1": build_binsout_cfg_v1,
     "ij_maint_v2": build_maint_v2,
     "ij_fixes_v1": build_fixes_v1,
     "ij_reminders_v1": build_reminders_v1,

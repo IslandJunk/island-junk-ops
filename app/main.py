@@ -67,24 +67,27 @@ if _PROTOTYPES.is_dir():
 _DISPATCH_REFS = ["ij_fleet_v1", "ij_colourmap_v1"]
 _CUSTOMER_REFS = ["ij_customers_v1", "ij_company_customers_v1", "ij_pm_db_v2", "ij_contracts_v1"]
 _HUB_REFS = ["ij_employees_v1", "ij_fleet_v1", "ij_colourmap_v1", "ij_bins_v1"]
+_DAYBOARD_REFS = ["ij_dayboard_status_v1", "ij_dayboard_notes_v1", "ij_dayboard_sitelog_v1"]
+# HR + office overlays the manager/owner hubs read (attendance grid, break totals, office notes).
+_HR_REFS = ["ij_attendance_v1", "ij_breaks_v1", "ij_daynotes_v1", "ij_binsout_cfg_v1"]
 
 # slug -> {file, refs keys injected from DB, optional bridge}. The Main Hub launcher
 # navigates here (its go() is remapped by main-hub-bridge.js).
 SCREENS: dict[str, dict] = {
     "new-booking":     {"file": "island-junk-new-booking-v67.html", "keys": _DISPATCH_REFS + _CUSTOMER_REFS + ["ij_rates_v1"], "bridge": "booking-bridge.js"},
-    "day-board":       {"file": "island-junk-day-board-v28.html",   "keys": _DISPATCH_REFS, "bridge": "day-board-bridge.js"},
-    "bin-registry":    {"file": "island-junk-bin-registry-v6.html", "keys": ["ij_bins_v1"], "bridge": None},
+    "day-board":       {"file": "island-junk-day-board-v28.html",   "keys": _DISPATCH_REFS + _DAYBOARD_REFS, "bridge": "day-board-bridge.js"},
+    "bin-registry":    {"file": "island-junk-bin-registry-v6.html", "keys": ["ij_bins_v1", "ij_binsout_cfg_v1"], "bridge": None},
     "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1"], "bridge": None},
     "commercial-form": {"file": "CREW-commercial-form-v22.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1"], "bridge": None},
-    "owner-hub":       {"file": "island-junk-owner-hub-v54.html",   "keys": _HUB_REFS, "bridge": "owner-hub-bridge.js"},
-    "manager-hub":     {"file": "island-junk-management-hub-v83.html", "keys": _HUB_REFS, "bridge": None},
-    "truck-hub":       {"file": "island-junk-truck-hub-v54.html",   "keys": ["ij_employees_v1", "ij_fleet_v1", "ij_fixes_v1"], "bridge": None},
-    "bin-tracker":     {"file": "island-junk-bin-tracker-v34.html", "keys": ["ij_bins_full_v1", "ij_fleet_v1", "ij_tares_v1", "ij_weighins_v1"], "bridge": "bin-tracker-bridge.js"},
-    "yard-hub":        {"file": "island-junk-yard-hub-v19.html",    "keys": ["ij_employees_v1", "ij_bins_v1", "ij_weighlog_v1", "ij_tares_v1", "ij_weighins_v1"], "bridge": None},
+    "owner-hub":       {"file": "island-junk-owner-hub-v54.html",   "keys": _HUB_REFS + _HR_REFS, "bridge": "owner-hub-bridge.js"},
+    "manager-hub":     {"file": "island-junk-management-hub-v83.html", "keys": _HUB_REFS + _HR_REFS, "bridge": None},
+    "truck-hub":       {"file": "island-junk-truck-hub-v54.html",   "keys": ["ij_employees_v1", "ij_fleet_v1", "ij_fixes_v1", "ij_daynotes_v1"], "bridge": None},
+    "bin-tracker":     {"file": "island-junk-bin-tracker-v34.html", "keys": ["ij_bins_full_v1", "ij_fleet_v1", "ij_tares_v1", "ij_weighins_v1", "ij_daynotes_v1", "ij_binsout_cfg_v1"], "bridge": "bin-tracker-bridge.js"},
+    "yard-hub":        {"file": "island-junk-yard-hub-v19.html",    "keys": ["ij_employees_v1", "ij_bins_v1", "ij_weighlog_v1", "ij_tares_v1", "ij_weighins_v1", "ij_breaks_v1", "ij_daynotes_v1"], "bridge": None},
     "yard-processing": {"file": "island-junk-yard-processing-v28.html", "keys": ["ij_bins_v1", "ij_weighlog_v1", "ij_tares_v1", "ij_weighins_v1"], "bridge": "yard-processing-bridge.js"},
     "maintenance-hub": {"file": "island-junk-maintenance-hub-v12.html", "keys": ["ij_fleet_v1", "ij_maint_v2", "ij_fixes_v1"], "bridge": None},
     "clock-out":       {"file": "island-junk-clock-out-v9.html",    "keys": ["ij_employees_v1", "ij_clock_log"], "bridge": None},
-    "employee-hours":  {"file": "island-junk-employee-hours-v6.html", "keys": ["ij_employees_v1", "ij_clock_log"], "bridge": None},
+    "employee-hours":  {"file": "island-junk-employee-hours-v6.html", "keys": ["ij_employees_v1", "ij_clock_log", "ij_breaks_v1"], "bridge": None},
     "incident-report": {"file": "island-junk-incident-report-v2.html", "keys": ["ij_employees_v1", "ij_incidents_v1"], "bridge": None},
     "reminders":       {"file": "island-junk-reminders-v1.html",   "keys": ["ij_reminders_v1"], "bridge": None},
     "swing-board":     {"file": "island-junk-swing-board-v5.html",  "keys": _DISPATCH_REFS, "bridge": None},
