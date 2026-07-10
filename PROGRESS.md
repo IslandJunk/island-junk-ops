@@ -1,5 +1,14 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-10 (session 3, cont.)** — Owner invoicing **"start 48-hour e-transfer clock"** button wired into the ready-to-
+invoice sheet (fires `POST /reminders/cc-charge`, idempotent, mirrors to the reminder calendar, charge stays manual).
+Then persisted the first slice of the **operational tail**: **follow-up reviews** (`ij_reviews_v1`, §11) + **consumables
+usage ledger** (`ij_usage_v1`) — both suppress their prototype demo-seeds by injecting `[]` (verified the manager-hub no
+longer persists Bonnie-Reyes demo rows). Two items **deferred with reasons** (need a product/Wes decision, not code): the
+yard waste-class picker (needs a `headline_class` flag + wording reconciliation) and the Nanaimo setup screen (no approved
+prototype → would violate the port-only guardrail; also depends on the deferred integrations). More tail keys remain
+(stock, PO#, hands-on pre-check, yard clock, sign-in log) — see §3.
+
 **2026-07-10 (session 3)** — Finished the **rest of field/dispatch persistence** (§3 NEXT #1): the **day-board crew
 overlays** (`ij_dayboard_status/notes/sitelog_v1` — status override, crew note, on-site log, all keyed by calendar
 event id), **attendance** (`ij_attendance_v1`) + **breaks** (`ij_breaks_v1`), and the office **day notes**
@@ -30,7 +39,7 @@ attendance), the external integrations (Twilio/Square/Dropbox — need creds), a
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree at the field/dispatch-persistence handoff commit, Alembic head **`84b98fe168ce`**
+**Repo state:** clean working tree, Alembic head **`e7b266ed5ed6`**
 (migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
 PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
 restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
@@ -107,6 +116,19 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
 - Injected on the screens that read them: day-board (overlays), owner/manager hubs (attendance/breaks/daynotes/binsout),
   bin-tracker + truck-hub + yard-hub (daynotes), employee-hours (breaks), bin-registry (binsout). All None-until-data.
 
+**Owner invoicing — 48-hour clock button** — the ready-to-invoice sheet (`owner-hub-bridge.js`) now shows a
+"Residential? Start 48-hour e-transfer clock" button per processed bin; it fires `POST /reminders/cc-charge` (idempotent
+per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
+Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
+
+**Operational tail (slice 1) — reviews + consumables usage** — migration `e7b266ed5ed6`:
+- **`followup_review`** (`ij_reviews_v1`, §11 follow-up-reviews tool) — upsert by `id`, verbatim doc + name/sent/skipped
+  lifted. **`usage_event`** (`ij_usage_v1`) — append-only consumables ledger, deduped by (item, timestamp, type) both
+  against the DB **and within the payload** (a re-sync or a doubled event would otherwise 500 on the unique key).
+- Both builders return **`[]` (not None) when empty on purpose** — the injected empty array suppresses the prototype's
+  demo-seed *write* (`revList()`/`seedUsage()` persist fake rows to localStorage otherwise). Verified the manager-hub no
+  longer leaks demo reviews to the DB. Injected on the crew forms + hubs that read/write them.
+
 **Disposal cost model**
 - `scripts/seed_disposal.py`: 7 facilities + **26 materials** (24 + 2 empty editable spots) + rate history.
 - `app/yard/disposal.py::compute_load_margin`: charge = waste-class price × net tonnes; cost = the class's own cost, or
@@ -173,15 +195,36 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
      yet). Then wire `google_punch_calendar_id` into config + a `_assert_punch_calendar` guard (live dispatch calendars
      stay hard-refused) + a graceful `punch_calendar_accessible()` skip (mirror the CC-charge reminder pattern), and
      confirm with Wes whether he wants **one event per punch** or **one per-day hours event**.
-2. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
+2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Slice 1 done this session
+   (reviews + usage). Remaining user-authored keys worth persisting (skip device-local/ephemeral ones):
+   **`ij_stock_v1`** (supplies stock levels — pairs with usage), **`ij_po_needed_v1`** (PM PO#s to chase — DEFERRED for a
+   seed-guard: its demo is gated by `ij_po_seeded_v1`, so injecting `[]` won't suppress it; inject the guard flag or skip
+   the seed in the handler), **`ij_precheck_v1`** (hands-on truck walk-around — parallel to the bin driver's, defect flags
+   already sync via `ij_fixes_v1`), **`ij_signin_log_v1`** (who signed in when), **`ij_yard_clock_v1`/`ij_yard_workers_v1`**
+   (yard self-clock — hours-adjacent), **`ij_checklists_v1`**, **`ij_bin_notes_v1`/`ij_bin_done_v1`**, **`ij_swing_log_v1`**.
+   Same model→migration→handler→ref pattern. **Intentionally NOT persisted** (device-local/ephemeral): `ij_active_day_v1`,
+   `ij_session_v1`, `*_seeded*` guards, `ij_resume_*` drafts, `ij_*_collapsed/open` UI state, `ij_weighin_skips`,
+   `ij_maint_snooze_v1`, `ij_punches_v1` (clock is authoritative via `ij_clock_log`).
+3. **Integrations** (need creds from Wes) — Twilio from the shared send-only **updates line** (booking confirm · on-our-way ·
    crew-entered next-customer ETA · reminder · residential completion) per `island-junk-SPEC-sms-and-texting.md`; Square
-   payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number.
-3. **Nanaimo phase 2** — owner-only "Set up this workspace" screen: basics → calendar → QuickBooks customer import → copy
-   Victoria's rate card + edit differences → people/trucks → bins/colour map → texting number (§13).
-4. **Owner invoicing UI polish** — a "start 48h clock" button (fires `POST /reminders/cc-charge`) and, if wanted, a
-   read-side for unpaid invoices (that data lives in QuickBooks; the app can't compute it).
-5. **Yard waste-class picker from the registry** — optional cleanup so an owner-added class auto-appears in the yard
-   picker (the margin already reconciles labels vs `disposal_material.m`; needs care re: the nested `suggestClass`).
+   payment links on the job; Dropbox photo auto-filing (TEST folder first). No A2P 10DLC for the local CA number. **Punch-time
+   calendar mirror** rides here too (blocked on the calendar share above).
+4. **Global brand-switching (the real Nanaimo keystone — non-integration, proposed).** The session already carries
+   `active_brand` and the owner-hub prototype has a Victoria↔Nanaimo `setBrand` switch, but `app_screen`/`sync` still
+   hardcode Victoria. Wiring the existing switch to the backend (owner-only `POST /auth/brand` → serve/sync the active
+   brand; crew stay locked; default Victoria = zero change) lets Nanaimo be **set up via the existing approved screens**
+   (rate sheet, employees, bins, colour map), no new UI. HIGH-stakes (§15 never-mix) — do carefully + test. **One product
+   question for Wes:** should the owner-hub's brand switch BE the global switch (everything follows it, per §3), or stay
+   settings-local? Confirm before wiring.
+5. **Nanaimo "Set up this workspace" screen (§13) — DEFERRED.** No approved prototype exists (building it net-new violates
+   the port-only guardrail), it depends on the deferred integrations (calendar/Twilio/Dropbox/Square), and §14 sequences it
+   last. Once brand-switching (above) lands + integrations exist, most of §13 is reachable via existing screens; the
+   dedicated setup wrapper needs a prototype from Wes first.
+6. **Yard waste-class picker from the registry — DEFERRED (product decision).** The picker's `WASTE_CLASSES` is a curated
+   13-item list whose wording differs from `disposal_material.m` (e.g. "Construction/demo" vs "Construction / demo";
+   "Rubble" vs "Rubble (brick / tile / mortar)"), so a naive merge adds conceptual duplicates (13→~25). Needs a
+   `headline_class` flag on `disposal_material` + Wes confirming the pickable set + exact wording. Pricing is unaffected
+   meanwhile (the margin already reconciles labels).
 
 ---
 

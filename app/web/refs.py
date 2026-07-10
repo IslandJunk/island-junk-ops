@@ -28,6 +28,7 @@ from app.models.enums import ACCESS_FLAGS, BinStatus, Brand, ColourKind, PayType
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
+from app.models.ops import FollowupReview, UsageEvent
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, RateCard
 from app.models.reminder import Reminder
 from app.models.settings import BrandSetting, DayNote
@@ -444,6 +445,22 @@ def build_binsout_cfg_v1(db: DbSession, brand: Brand) -> dict | None:
     return row.value if (row and isinstance(row.value, dict)) else None
 
 
+def build_reviews_v1(db: DbSession, brand: Brand) -> list:
+    """`ij_reviews_v1` — the follow-up-reviews list (verbatim records). Returns [] (NOT None)
+    even when empty, so the injected empty array suppresses the prototype's demo-seed write
+    (`revList()` seeds + persists rv1/rv2/rv3 to localStorage on render otherwise)."""
+    rows = db.scalars(select(FollowupReview).where(FollowupReview.brand == brand)).all()
+    return [r.doc for r in rows]
+
+
+def build_usage_v1(db: DbSession, brand: Brand) -> list:
+    """`ij_usage_v1` — the consumables used/restock ledger. Returns [] (NOT None) even when
+    empty, so the injected empty array suppresses the prototype's `seedUsage()` demo."""
+    rows = db.scalars(select(UsageEvent).where(UsageEvent.brand == brand)).all()
+    return [{"id": r.item_id, "name": r.item_name, "qty": r.qty, "type": r.type, "at": r.at_iso}
+            for r in rows]
+
+
 _BUILDERS = {
     "ij_fleet_v1": build_fleet_v1,
     "ij_colourmap_v1": build_colourmap_v1,
@@ -467,6 +484,8 @@ _BUILDERS = {
     "ij_breaks_v1": build_breaks_v1,
     "ij_daynotes_v1": build_daynotes_v1,
     "ij_binsout_cfg_v1": build_binsout_cfg_v1,
+    "ij_reviews_v1": build_reviews_v1,
+    "ij_usage_v1": build_usage_v1,
     "ij_maint_v2": build_maint_v2,
     "ij_fixes_v1": build_fixes_v1,
     "ij_reminders_v1": build_reminders_v1,

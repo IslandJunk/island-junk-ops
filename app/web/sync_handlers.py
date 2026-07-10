@@ -33,6 +33,7 @@ from app.models.enums import (
 from app.models.field_job import FieldJob
 from app.models.incident import Incident
 from app.models.maintenance import DefectFlag, MaintenanceDoc
+from app.models.ops import FollowupReview, UsageEvent
 from app.models.rates import AreaSurcharge, DisposalFacility, DisposalMaterial, DisposalRateHistory, RateCard
 from app.models.reminder import Reminder
 from app.models.settings import BrandSetting, DayNote
@@ -620,6 +621,60 @@ def apply_binsout_cfg(db: DbSession, brand: Brand, data, actor: Employee) -> dic
     return _apply_setting(db, brand, "ij_binsout_cfg_v1", data)
 
 
+def apply_reviews(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_reviews_v1` — the §11 follow-up-reviews list. Upsert by `id`; upsert-only (a
+    review record is a permanent 'who to ask' log, never delete-by-absence)."""
+    if not isinstance(data, list):
+        return {"upserted": 0}
+    n = 0
+    for rec in data:
+        if not isinstance(rec, dict) or not rec.get("id"):
+            continue
+        sid = str(rec["id"])
+        row = db.scalar(select(FollowupReview).where(
+            FollowupReview.brand == brand, FollowupReview.source_id == sid))
+        if row is None:
+            row = FollowupReview(brand=brand, source_id=sid)
+            db.add(row)
+        row.name = rec.get("name")
+        row.review_sent = bool(rec.get("reviewSent"))
+        row.skipped = bool(rec.get("skipped"))
+        row.doc = rec
+        n += 1
+    db.commit()
+    return {"upserted": n}
+
+
+def apply_usage(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_usage_v1` — the consumables used/restock ledger. Append-only; dedup by
+    (item_id, at, type) against the DB **and within this payload** (the ledger can carry
+    two identical events, which would otherwise collide on the unique key)."""
+    if not isinstance(data, list):
+        return {"added": 0}
+    added = 0
+    seen: set[tuple] = set()
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        at = rec.get("at")
+        if not at:
+            continue
+        item_id, typ = rec.get("id"), rec.get("type")
+        key = (item_id, str(at), typ)
+        if key in seen:
+            continue
+        seen.add(key)
+        if db.scalar(select(UsageEvent).where(
+                UsageEvent.brand == brand, UsageEvent.item_id == item_id,
+                UsageEvent.at_iso == str(at), UsageEvent.type == typ)):
+            continue
+        db.add(UsageEvent(brand=brand, item_id=item_id, item_name=rec.get("name"),
+                          qty=_int(rec.get("qty")), type=typ, at_iso=str(at)))
+        added += 1
+    db.commit()
+    return {"added": added}
+
+
 def apply_maint(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """Upsert the whole maintenance document (`ij_maint_v2` = {order, m, _v}) — one row
     per brand. Stored verbatim as JSONB so the prototype's structure + client-side
@@ -1119,6 +1174,8 @@ HANDLERS = {
     "ij_breaks_v1": apply_breaks,
     "ij_daynotes_v1": apply_daynotes,
     "ij_binsout_cfg_v1": apply_binsout_cfg,
+    "ij_reviews_v1": apply_reviews,
+    "ij_usage_v1": apply_usage,
     "ij_maint_v2": apply_maint,
     "ij_fixes_v1": apply_fixes,
     "ij_fixes_resolved_v1": apply_fixes_resolved,

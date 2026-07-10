@@ -21,6 +21,7 @@ from app.models import (  # noqa: F401
     incident,
     job,
     maintenance,
+    ops,
     owner_security,
     rates,
     reminder,
