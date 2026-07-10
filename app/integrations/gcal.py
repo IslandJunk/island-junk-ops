@@ -52,6 +52,20 @@ def _assert_reminder_calendar(cal_id: str | None) -> str:
     return cal_id
 
 
+def _assert_punch_calendar(cal_id: str | None) -> str:
+    """The off-board punch-time calendar is a third writable target. Hard-refuses the two
+    live dispatch calendars + primary + the TEST + reminder calendars — punch events go
+    ONLY to the configured punch calendar."""
+    if not cal_id:
+        raise CalendarGuardError("No punch calendar configured (google_punch_calendar_id).")
+    if (cal_id in FORBIDDEN or cal_id == settings.google_test_calendar_id
+            or cal_id == settings.google_reminder_calendar_id):
+        raise CalendarGuardError(f"REFUSING: '{cal_id}' is not the punch calendar.")
+    if cal_id != settings.google_punch_calendar_id:
+        raise CalendarGuardError("REFUSING: target is not the configured punch calendar.")
+    return cal_id
+
+
 # CC-charge reminder event colours (Google colorIds; mirror the app lifecycle):
 CC_UNPAID_COLOR = 4   # Flamingo — residential unpaid (matches the day-board lifecycle)
 CC_PAID_COLOR = 3     # Grape/purple — paid / complete (Wes: "turned purple for complete")
@@ -166,4 +180,84 @@ def recolor_reminder_event(event_id: str, color_id: str | int) -> None:
 
 def delete_reminder_event(event_id: str) -> None:
     cal = _assert_reminder_calendar(settings.google_reminder_calendar_id)
+    _svc().events().delete(calendarId=cal, eventId=event_id).execute()
+
+
+# ── Punch-time calendar (off-board; mirrors crew clock in/out) ──────────────────
+
+import re as _re
+
+
+def parse_clock(s: str | None) -> time | None:
+    """"7:30am" / "3:05 PM" / "15:05" -> time, or None. Matches the prototype's clock format."""
+    if not s:
+        return None
+    m = _re.match(r"^\s*(\d{1,2}):(\d{2})\s*([ap])\.?m\.?\s*$", str(s), _re.I)
+    if m:
+        h, mn, ap = int(m.group(1)), int(m.group(2)), m.group(3).lower()
+        if ap == "p" and h < 12:
+            h += 12
+        if ap == "a" and h == 12:
+            h = 0
+        return time(hour=h % 24, minute=mn) if 0 <= mn < 60 else None
+    m = _re.match(r"^\s*(\d{1,2}):(\d{2})\s*$", str(s))   # 24h fallback
+    if m and 0 <= int(m.group(1)) < 24 and 0 <= int(m.group(2)) < 60:
+        return time(hour=int(m.group(1)), minute=int(m.group(2)))
+    return None
+
+
+def punch_calendar_accessible() -> bool:
+    """True only if the service account can reach the punch calendar (shared with it).
+    Lets the clock sync mirror best-effort and skip cleanly until it's shared."""
+    cal = settings.google_punch_calendar_id
+    if not cal or cal in FORBIDDEN or cal in (settings.google_test_calendar_id,
+                                              settings.google_reminder_calendar_id):
+        return False
+    try:
+        _svc().calendars().get(calendarId=cal).execute()
+        return True
+    except Exception:
+        return False
+
+
+def _punch_body(*, name: str, on_date: date, in_str: str | None, out_str: str | None,
+                truck: str | None) -> dict:
+    """One event per person per day. Timed in→out when both parse (a shift block); else an
+    all-day marker. Truck rides in the title. Tagged so it's identifiable as app-created."""
+    truck_suffix = f" · #{truck}" if truck else ""
+    t_in, t_out = parse_clock(in_str), parse_clock(out_str)
+    body: dict = {
+        "extendedProperties": {"private": {"ij_app": "1", "ij_kind": "punch"}},
+    }
+    if t_in and t_out and t_out > t_in:
+        body["summary"] = f"{name} · {in_str}–{out_str}{truck_suffix}"
+        body["start"] = {"dateTime": datetime.combine(on_date, t_in).isoformat(), "timeZone": TZ}
+        body["end"] = {"dateTime": datetime.combine(on_date, t_out).isoformat(), "timeZone": TZ}
+    elif t_in:   # clocked in, not out yet (or out didn't parse) — a 30-min "on the clock" marker
+        end_dt = datetime.combine(on_date, t_in) + timedelta(minutes=30)
+        body["summary"] = f"{name} · in {in_str}{' (working)' if not out_str else ''}{truck_suffix}"
+        body["start"] = {"dateTime": datetime.combine(on_date, t_in).isoformat(), "timeZone": TZ}
+        body["end"] = {"dateTime": end_dt.isoformat(), "timeZone": TZ}
+    else:        # no parseable time — all-day marker
+        body["summary"] = f"{name}{truck_suffix}"
+        body["start"] = {"date": on_date.isoformat()}
+        body["end"] = {"date": (on_date + timedelta(days=1)).isoformat()}
+    return body
+
+
+def upsert_punch_event(*, event_id: str | None, name: str, on_date: date,
+                       in_str: str | None, out_str: str | None, truck: str | None) -> str:
+    """Create or update the one punch event for a person's day; returns its event id. Update
+    in place (by id) as the punch evolves clock-in → clock-out."""
+    cal = _assert_punch_calendar(settings.google_punch_calendar_id)
+    body = _punch_body(name=name, on_date=on_date, in_str=in_str, out_str=out_str, truck=truck)
+    if event_id:
+        ev = _svc().events().patch(calendarId=cal, eventId=event_id, body=body).execute()
+    else:
+        ev = _svc().events().insert(calendarId=cal, body=body).execute()
+    return ev["id"]
+
+
+def delete_punch_event(event_id: str) -> None:
+    cal = _assert_punch_calendar(settings.google_punch_calendar_id)
     _svc().events().delete(calendarId=cal, eventId=event_id).execute()

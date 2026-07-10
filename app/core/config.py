@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     google_reminder_calendar_id: str | None = (
         "c_139129e65b40062ead44d4aa680aa8c186c997fdcc9f8c8946a2fc6347f0b83c@group.calendar.google.com"
     )
+    # Off-board punch-time calendar (TEST) — mirrors crew clock in/out as one event per
+    # person per day so the office can see hours at a glance. Shared with the service
+    # account 2026-07 ("PUNCH TIME - TEST"). Never a dispatch/live calendar.
+    google_punch_calendar_id: str | None = (
+        "c_1033bcf8590acc0d57229b30e59d0169c4211883dd51ad18acb15476cc0193aa@group.calendar.google.com"
+    )
 
     @property
     def is_db_configured(self) -> bool:

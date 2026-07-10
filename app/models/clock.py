@@ -22,3 +22,4 @@ class ClockPunch(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     out_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
     done_time: Mapped[str | None] = mapped_column(String(20), nullable=True)  # end-of-day checklist done
     truck: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    gcal_event_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)  # punch-calendar mirror

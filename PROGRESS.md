@@ -39,7 +39,7 @@ attendance), the external integrations (Twilio/Square/Dropbox — need creds), a
 scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
 override the prototype's hardcoded constants with real data. Deploy target: Render.
 
-**Repo state:** clean working tree, Alembic head **`70f23a968aa0`**
+**Repo state:** clean working tree, Alembic head **`a5abfdbdebfc`**
 (migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
 PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
 restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
@@ -120,6 +120,17 @@ Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-S
 "Residential? Start 48-hour e-transfer clock" button per processed bin; it fires `POST /reminders/cc-charge` (idempotent
 per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
 Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
+
+**Punch-time calendar mirror — LIVE** (migration `a5abfdbdebfc` adds `clock_punch.gcal_event_id`) — Wes shared the
+"PUNCH TIME - TEST" calendar (`c_1033bcf8…`) with the service account (writer). `apply_clock` now mirrors each punch to
+it best-effort: **one event per person per day**, updated in place clock-in → clock-out (a timed shift block
+`Name · 7:30am–3:30pm · #5` when both times parse, else an all-day/"working" marker). New `app/integrations/gcal.py`
+helpers `parse_clock`, `punch_calendar_accessible`, `upsert_punch_event`, `delete_punch_event` behind a new
+`_assert_punch_calendar` guard. **Guard isolation re-verified:** the punch guard refuses live×2 + primary + TEST +
+reminder; the test/reminder guards refuse the punch calendar — three isolated writable targets, live calendars
+hard-refused. Browser/DB-verified: clock-in created the event, clock-out updated the *same* event to the timed shift;
+test event + row deleted after. (Chosen **per-day** over per-punch — matches the one-ClockPunch-per-person-per-day model;
+easy to switch if Wes wants per-punch. Single calendar for now; per-brand Nanaimo punch calendar is a later config add.)
 
 **Trucks + colour→truck map now editable/persisted (§6)** — `apply_fleet` (`ij_fleet_v1` = `{num:{mgr}}`) upserts the
 dispatch-truck roster by (brand, num) with its lead; a truck dropped from a present non-empty set is **soft-removed**
@@ -219,13 +230,8 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
    notes/config in session 3). The bin-tracker's shared punch mirror (`ij_punches_v1`) and its device-local day-board
    handoff (`ij_active_day_v1`) were **intentionally left unpersisted** — the authoritative clock record already syncs
    via `ij_clock_log`, and the handoff is ephemeral per-device state.
-   - **Remaining sub-item: the punch-time calendar mirror.** Wes created a dedicated **punch-time TEST calendar**
-     (`c_1033bcf8590acc0d57229b30e59d0169c4211883dd51ad18acb15476cc0193aa@group.calendar.google.com`) to mirror clock
-     in/out onto a Google Calendar. **Blocked on sharing:** share it (writer / "Make changes to events") with the
-     service account `ij-calendar-spike@island-junk-spike.iam.gserviceaccount.com` (checked 2026-07-10 → 404, not shared
-     yet). Then wire `google_punch_calendar_id` into config + a `_assert_punch_calendar` guard (live dispatch calendars
-     stay hard-refused) + a graceful `punch_calendar_accessible()` skip (mirror the CC-charge reminder pattern), and
-     confirm with Wes whether he wants **one event per punch** or **one per-day hours event**.
+   - **Punch-time calendar mirror — DONE** (calendar shared + wired + verified; see the DONE section). Open: confirm
+     per-day (chosen) vs per-punch with Wes; add a per-brand Nanaimo punch calendar when Nanaimo goes live.
 2. **Operational-tail persistence (IN PROGRESS — the safe, non-integration continuation).** Done this session: reviews +
    usage + **precheck**. Remaining user-authored keys worth persisting (skip device-local/ephemeral ones):
    **`ij_stock_v1`** (supplies stock levels — pairs with usage; note: its "seed" is the real consumable catalog with demo
@@ -287,9 +293,9 @@ tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
   (`app/dispatch/calendar_read.py::is_manager_note`). Build it into every future calendar reader too. *(Open: the spec's
   `#3 truck` example reads like a typo for `Truck #3`; we implemented the plain leading-`#` = note rule — confirm.)*
 - **Calendar guard (NEVER weaken):** `app/integrations/gcal.py` hard-refuses the two live IDs (`LIVE_VICTORIA`, `LIVE_JOBS2`)
-  + `primary`. Booking writes ONLY the configured TEST calendar; CC-charge writes ONLY the configured reminder calendar
-  (each guard refuses the other's target too). Every calendar test creates a **real** event on those calendars — delete it
-  by id afterward.
+  + `primary`. **Three isolated writable targets:** booking → the configured TEST calendar; CC-charge → the reminder calendar;
+  crew punches → the punch calendar. Each `_assert_*_calendar` guard allows ONLY its own target and refuses the other two +
+  the live IDs (re-verified 2026-07-10). Every calendar test creates a **real** event — delete it by id afterward.
 - **`_serve_prototype` injects before the LAST `</body>` only** (not replace-all) — some prototypes embed `</body>` inside
   JS export-template strings (owner hub's PDF/print docs); a replace-all injects a `<script>` mid-string and kills that whole
   script block. (`</head>` uses the FIRST match, which is the real page head.)

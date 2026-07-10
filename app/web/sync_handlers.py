@@ -324,10 +324,12 @@ def apply_incidents(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
 
 
 def apply_clock(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
-    """Upsert one punch per (name, work_date); fill in/out/done times as they arrive."""
+    """Upsert one punch per (name, work_date); fill in/out/done times as they arrive, then
+    mirror the punch to the off-board punch-time calendar (best-effort)."""
     if not isinstance(data, list):
         return {"upserted": 0}
     n = 0
+    touched: list[ClockPunch] = []
     for rec in data:
         if not isinstance(rec, dict):
             continue
@@ -348,9 +350,37 @@ def apply_clock(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
             p.done_time = rec["doneAt"] or None
         if rec.get("truck"):
             p.truck = rec["truck"]
+        touched.append(p)
         n += 1
     db.commit()
-    return {"upserted": n}
+    mirrored = _mirror_punches(db, touched)
+    return {"upserted": n, "calendar_mirrored": mirrored}
+
+
+def _mirror_punches(db: DbSession, punches: list[ClockPunch]) -> int:
+    """Create/update one punch-calendar event per touched punch. Best-effort: skips cleanly
+    if the calendar isn't shared/configured, and never lets a calendar error fail the sync."""
+    if not punches:
+        return 0
+    try:
+        from app.integrations import gcal
+        if not gcal.punch_calendar_accessible():
+            return 0
+    except Exception:
+        return 0
+    mirrored = 0
+    for p in punches:
+        try:
+            eid = gcal.upsert_punch_event(
+                event_id=p.gcal_event_id, name=p.employee_name, on_date=p.work_date,
+                in_str=p.in_time, out_str=p.out_time, truck=p.truck)
+            if eid and eid != p.gcal_event_id:
+                p.gcal_event_id = eid
+            mirrored += 1
+        except Exception:
+            pass
+    db.commit()
+    return mirrored
 
 
 def apply_field_jobs(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
