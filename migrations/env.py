@@ -9,6 +9,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.base import Base
+from app.db.session import normalize_db_url
 
 # Import every model so all tables register on Base.metadata (single source: app.models.all).
 import app.models.all  # noqa: F401
@@ -18,7 +19,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 if settings.database_url:
-    config.set_main_option("sqlalchemy.url", settings.database_url)
+    # Same psycopg-3 scheme fix as the app engine — a bare postgres:// URL (Render's raw form)
+    # would otherwise make alembic reach for psycopg2 and crash the preDeploy migration.
+    config.set_main_option("sqlalchemy.url", normalize_db_url(settings.database_url))
 
 target_metadata = Base.metadata
 
