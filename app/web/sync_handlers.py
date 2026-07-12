@@ -383,11 +383,32 @@ def _mirror_punches(db: DbSession, punches: list[ClockPunch]) -> int:
     return mirrored
 
 
+def _ensure_review_for_commercial(db: DbSession, brand: Brand, fj: FieldJob, phone_idx: dict) -> bool:
+    """A completed commercial job → a follow-up-review record so it shows on the manager board
+    alongside residential (§11, Wes: commercial included). Idempotent per job; resolves the
+    phone by a unique company-name match. Never re-creates a record that already exists."""
+    if not fj.customer:
+        return False
+    sid = "rvfj_" + str(fj.source_id)
+    if db.scalar(select(FollowupReview).where(FollowupReview.brand == brand, FollowupReview.source_id == sid)):
+        return False
+    crew = None
+    if isinstance(fj.visits, list) and fj.visits:
+        crew = (fj.visits[-1] or {}).get("crew") if isinstance(fj.visits[-1], dict) else None
+    ph = phone_idx.get(re.sub(r"[^a-z0-9]", "", fj.customer.lower()))
+    db.add(FollowupReview(
+        brand=brand, source_id=sid, name=fj.customer, account="commercial", phone=ph,
+        doc={"id": sid, "name": fj.customer, "account": "commercial", "crew": crew, "reviewSent": False, "skipped": False}))
+    return True
+
+
 def apply_field_jobs(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
-    """Upsert crew field jobs by the prototype's `id`; visits replace wholesale."""
+    """Upsert crew field jobs by the prototype's `id`; visits replace wholesale. A completed
+    COMMERCIAL job also spawns a follow-up-review record for the manager board."""
     if not isinstance(data, list):
         return {"upserted": 0}
-    n = 0
+    n = reviews = 0
+    phone_idx = None
     for rec in data:
         if not isinstance(rec, dict) or not rec.get("id"):
             continue
@@ -405,9 +426,14 @@ def apply_field_jobs(db: DbSession, brand: Brand, data, actor: Employee) -> dict
             fj.address = rec["address"] or None
         if isinstance(rec.get("visits"), list):
             fj.visits = rec["visits"]
+        db.flush()
+        if fj.type == "commercial" and fj.status == "done" and fj.customer:
+            if phone_idx is None:
+                phone_idx = _review_phone_index(db, brand)
+            reviews += 1 if _ensure_review_for_commercial(db, brand, fj, phone_idx) else 0
         n += 1
     db.commit()
-    return {"upserted": n}
+    return {"upserted": n, "commercial_reviews": reviews}
 
 
 def apply_weigh(db: DbSession, brand: Brand, data, actor: Employee) -> dict:

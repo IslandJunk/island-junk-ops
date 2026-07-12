@@ -91,7 +91,7 @@ SCREENS: dict[str, dict] = {
     "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1", "ij_reviews_v1", "ij_usage_v1", "ij_owner_cfg_v1"], "bridge": None},
     "commercial-form": {"file": "CREW-commercial-form-v22.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1", "ij_usage_v1", "ij_owner_cfg_v1"], "bridge": None},
     "owner-hub":       {"file": "island-junk-owner-hub-v54.html",   "keys": _HUB_REFS + _HR_REFS + ["ij_usage_v1", "ij_checklists_v1", "ij_po_needed_v1", "ij_po_seeded_v1", "ij_owner_cfg_v1"], "bridge": "owner-hub-bridge.js"},
-    "manager-hub":     {"file": "island-junk-management-hub-v83.html", "keys": _HUB_REFS + _HR_REFS + ["ij_reviews_v1", "ij_usage_v1", "ij_po_needed_v1", "ij_owner_cfg_v1"], "bridge": None},
+    "manager-hub":     {"file": "island-junk-management-hub-v83.html", "keys": _HUB_REFS + _HR_REFS + ["ij_reviews_v1", "ij_usage_v1", "ij_po_needed_v1", "ij_owner_cfg_v1"], "bridge": "manager-hub-bridge.js"},
     "truck-hub":       {"file": "island-junk-truck-hub-v54.html",   "keys": ["ij_employees_v1", "ij_fleet_v1", "ij_fixes_v1", "ij_daynotes_v1", "ij_usage_v1", "ij_checklists_v1"], "bridge": None},
     "bin-tracker":     {"file": "island-junk-bin-tracker-v34.html", "keys": ["ij_bins_full_v1", "ij_fleet_v1", "ij_tares_v1", "ij_weighins_v1", "ij_daynotes_v1", "ij_binsout_cfg_v1"], "bridge": "bin-tracker-bridge.js"},
     "yard-hub":        {"file": "island-junk-yard-hub-v19.html",    "keys": ["ij_employees_v1", "ij_bins_v1", "ij_weighlog_v1", "ij_tares_v1", "ij_weighins_v1", "ij_breaks_v1", "ij_daynotes_v1"], "bridge": None},
