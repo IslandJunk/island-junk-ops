@@ -11,20 +11,24 @@ rejected (auth expiry) in favour of card-on-file. **Shipped + verified:**
 - **WS2** — auto-paint **live end-to-end**: `gcal.recolor_event` (TEST-calendar-only) + `app/dispatch/paint.py`,
   **wired** into `apply_dayboard_status` (crew marks a stop done → linked Job status + paint: bins→Tomato/red,
   hands-on→Basil/green; transition-only; owner close-out colours never auto-painted).
-- **WS3 card-on-file BACKEND** — `square_pay.py`: `create_customer` / `save_card_on_file` (Cards API, token
-  only — never the PAN/CVV) / `charge_card_on_file` (Payments API, owner-pressed, idempotent, raises
-  `SquareError`). Verified against **Square SANDBOX** (save VISA ••5858, charge $25+2.4%=$25.60 COMPLETED,
-  idempotent, bad-card error). `square_application_id` added to config.
+- **WS3 card-on-file BACKEND + ENDPOINTS — DONE + verified (sandbox).** `square_pay.py`: `create_customer`
+  / `save_card_on_file` (Cards API, token only — never the PAN/CVV) / `charge_card_on_file` (Payments API,
+  owner-pressed, idempotent, raises `SquareError`). Tables `stored_card` + `card_charge` (migration
+  `28c686247d41`, applied). Endpoints: `POST /square/save-card` (manager), `GET /square/card-on-file`,
+  `POST /square/charge-card-on-file` (**owner-only** — 403 for managers). All verified against **Square
+  SANDBOX** end-to-end (save VISA ••5858 → owner charge $25.60 COMPLETED + audit row → manager blocked).
+  **Remaining WS3 = FRONTEND ONLY:** the Web Payments SDK card field at bin booking (tokenize → save-card)
+  + the **"Charge card on file"** button on the owner queue — both best done with Wes live (entering a
+  Square test card). `square_application_id` in config (public, for the SDK).
 
 **Square SANDBOX connected LOCALLY** — sandbox creds in the git-ignored local `.env`
 (`SQUARE_ENVIRONMENT=sandbox`, app id `sandbox-sq0idb-…`, location `L57750E6QHVHF` "Default Test Account" CAD).
 **Render still has PRODUCTION Square** (untouched). Test nonce `cnon:card-nonce-ok`.
 
-**Still to build:** WS3 — persist tokens (`stored_card` + `card_charge` tables/migration), the save-card +
-charge-card-on-file **endpoints**, the **Web Payments SDK card field** at bin booking + the **"Charge card on
-file"** button on the owner queue. WS1 — two-event link + `BIN-xxxx` reference code. **WS4 QuickBooks** — needs
-Wes's QB **sandbox + developer app** (dev.intuit.com; redirect URIs `.../quickbooks/callback`). No new
-migration yet. Make.com stays off.
+**Still to build:** WS3 **frontend** — the Web Payments SDK card field at bin booking + the "Charge card on
+file" button on the owner queue (both want Wes live with a Square test card). WS1 — two-event link +
+`BIN-xxxx` reference code. **WS4 QuickBooks** — needs Wes's QB **sandbox + developer app** (dev.intuit.com;
+redirect URIs `.../quickbooks/callback`). Migration head now **`28c686247d41`**. Make.com stays off.
 
 **2026-07-12 (LIVE on Render)** — **Deployed to production.** App is live at
 **`https://island-junk-ops.onrender.com`** (Blueprint `render.yaml`, Starter plan, Python 3.13, GitHub repo
