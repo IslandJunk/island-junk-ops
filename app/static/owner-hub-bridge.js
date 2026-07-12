@@ -135,28 +135,68 @@
     }
   })();
 
-  fetch("/invoice-queue", { credentials: "same-origin" })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (Q) {
-      if (!Q || typeof OWNER_ALERTS === "undefined") return;
-      window.__ijQueue = Q;
-      var alerts = [];
-      if (Q.counts.ready > 0) {
-        alerts.push({ k: "oa_invoice", dot: "#3CA03C", nm: "Ready to invoice", sb: "Completed jobs, all captured", count: String(Q.counts.ready) });
-      }
-      if (Q.counts.bins_overdue > 0) {
-        alerts.push({ k: "oa_bins", dot: "#E8A317", nm: "Bins to bill / overdue", sb: "Out 14+ days", count: String(Q.counts.bins_overdue) });
-      }
-      OWNER_ALERTS.victoria = alerts;   // replace the demo; unpaid-invoices needs QuickBooks
+  // Residential-bin "awaiting payment" queue (WS1): the bins you've invoiced whose 48-hour
+  // e-transfer clock is running. "Received as e-transfer" closes it out via POST
+  // /reminders/{id}/done (which also turns its reminder-calendar event purple). "Charge card on
+  // file" is added with the card-on-file build (WS3). No auto-charge — one owner tap (§2).
+  window.__ijMarkPaid = function (btn, id) {
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    fetch("/reminders/" + encodeURIComponent(id) + "/done", { method: "POST", credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
+        if (res && res.done) {
+          btn.parentNode.innerHTML = '<div class="meta" style="margin-top:8px;color:#3CA03C;font-weight:700">'
+            + "✓ Paid by e-transfer — closed out"
+            + (res.calendar_updated ? " (calendar → purple)" : "") + ".</div>";
+        } else { btn.disabled = false; btn.textContent = "💵 Received as e-transfer"; }
+      }).catch(function () { btn.disabled = false; btn.textContent = "💵 Received as e-transfer"; });
+  };
 
-      var orig = window.ownerAlert;
-      window.ownerAlert = function (k) {
-        var q = window.__ijQueue;
-        if (q && k === "oa_invoice") return invoiceSheet(q);
-        if (q && k === "oa_bins") return overdueSheet(q);
-        return orig.apply(this, arguments);
-      };
-      if (typeof renderHub === "function") renderHub();
-    })
-    .catch(function () {});
+  function awaitingSheet(rems) {
+    var rows = (rems || []).map(function (r) {
+      var due = r.due ? ('<div class="meta" style="margin-top:6px;color:#E8A317;font-weight:700">e-transfer due '
+        + esc(r.due) + " — else charge card on file +2.4%</div>") : "";
+      var paidBtn = '<button class="btn2" style="margin-top:9px;font-size:12.5px;padding:7px 10px"'
+        + ' onclick="__ijMarkPaid(this,' + JSON.stringify(String(r.id)).replace(/"/g, "&quot;") + ')">'
+        + "💵 Received as e-transfer</button>";
+      return card("<b>" + esc(r.name || r.text || "Residential bin") + "</b>"
+        + (r.addr ? ('<br><span style="color:var(--muted);font-size:12.5px">' + esc(r.addr) + "</span>") : "")
+        + due + paidBtn);
+    }).join("");
+    if (!rows) rows = '<div class="meta" style="margin-top:10px">No bins awaiting payment.</div>';
+    window.sheet("Bins awaiting payment (48h)",
+      '<div class="note" style="margin-top:6px">Residential bins you’ve invoiced — within 48 hours they '
+      + "e-transfer, else you charge the card on file (+2.4%). One tap when the money’s in.</div>" + rows
+      + '<button class="btn2" onclick="closeSheet()" style="margin-top:12px">Close</button>');
+  }
+
+  Promise.all([
+    fetch("/invoice-queue", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+    fetch("/reminders?kind=cc_charge", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+  ]).then(function (out) {
+    var Q = out[0], R = out[1];
+    if (typeof OWNER_ALERTS === "undefined") return;
+    window.__ijQueue = Q;
+    window.__ijAwaiting = (R && R.reminders) || [];
+    var alerts = [];
+    if (Q && Q.counts.ready > 0) {
+      alerts.push({ k: "oa_invoice", dot: "#3CA03C", nm: "Ready to invoice", sb: "Completed jobs, all captured", count: String(Q.counts.ready) });
+    }
+    if (window.__ijAwaiting.length > 0) {
+      alerts.push({ k: "oa_awaiting", dot: "#E8A317", nm: "Bins awaiting payment", sb: "Invoiced · 48-hour clock", count: String(window.__ijAwaiting.length) });
+    }
+    if (Q && Q.counts.bins_overdue > 0) {
+      alerts.push({ k: "oa_bins", dot: "#E8A317", nm: "Bins to bill / overdue", sb: "Out 14+ days", count: String(Q.counts.bins_overdue) });
+    }
+    OWNER_ALERTS.victoria = alerts;   // replace the demo; unpaid-invoices needs QuickBooks
+
+    var orig = window.ownerAlert;
+    window.ownerAlert = function (k) {
+      if (k === "oa_invoice" && window.__ijQueue) return invoiceSheet(window.__ijQueue);
+      if (k === "oa_awaiting") return awaitingSheet(window.__ijAwaiting);
+      if (k === "oa_bins" && window.__ijQueue) return overdueSheet(window.__ijQueue);
+      return orig.apply(this, arguments);
+    };
+    if (typeof renderHub === "function") renderHub();
+  }).catch(function () {});
 })();
