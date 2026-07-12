@@ -1,436 +1,197 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-10 (session 3, cont.)** — Owner invoicing **"start 48-hour e-transfer clock"** button wired into the ready-to-
-invoice sheet (fires `POST /reminders/cc-charge`, idempotent, mirrors to the reminder calendar, charge stays manual).
-Then persisted the first slice of the **operational tail**: **follow-up reviews** (`ij_reviews_v1`, §11) + **consumables
-usage ledger** (`ij_usage_v1`) — both suppress their prototype demo-seeds by injecting `[]` (verified the manager-hub no
-longer persists Bonnie-Reyes demo rows). Two items **deferred with reasons** (need a product/Wes decision, not code): the
-yard waste-class picker (needs a `headline_class` flag + wording reconciliation) and the Nanaimo setup screen (no approved
-prototype → would violate the port-only guardrail; also depends on the deferred integrations). More tail keys remain
-(stock, PO#, hands-on pre-check, yard clock, sign-in log) — see §3.
+**2026-07-12** — Went **live on Twilio** (Wes's creds in `.env`, Full account, updates line 778-906-5865): outbound texts
+**delivered end-to-end**. Built the **manager-reply nudge** (forwards a customer reply to the manager's phone *with* name +
+address — the "who's it from?" fix), made all **message wording owner-editable** in the Owner Hub, and shipped the full
+**follow-up-review send system** (real Victoria Google link, two-level dedup, manager board res + commercial, crew job-end
+button). Earlier in the arc: global **brand-switching** (Nanaimo keystone), **punch-time calendar mirror**, trucks/colour-map
+editing, the rest of field/dispatch + operational-tail persistence, and all three integrations scaffolded creds-gated.
 
-**2026-07-10 (session 3)** — Finished the **rest of field/dispatch persistence** (§3 NEXT #1): the **day-board crew
-overlays** (`ij_dayboard_status/notes/sitelog_v1` — status override, crew note, on-site log, all keyed by calendar
-event id), **attendance** (`ij_attendance_v1`) + **breaks** (`ij_breaks_v1`), and the office **day notes**
-(`ij_daynotes_v1`) + long-out **threshold config** (`ij_binsout_cfg_v1`, in a new generic `brand_setting` KV). 5 new
-tables (migration `84b98fe168ce`). Caught + fixed a concurrency bug on the way: the three day-board overlays share one
-`(brand, event_id)` row, so two near-simultaneous crew writes raced on the unique constraint and one was lost — now an
-atomic Postgres `ON CONFLICT` upsert. Verified end-to-end (API + client `setStatus`/`setNote` path + reconcile-clear).
-Also gave Wes the steps to share the new **punch-time test calendar** with the service account (mirror wiring queued
-until it's shared). Integrations still last, per Wes.
+**Stack:** FastAPI + SQLAlchemy 2 + Alembic + Postgres (Render, via `.env`). Python **3.14**. Serves the approved
+`/prototypes` HTML **untouched** — real DB data injected inline as `localStorage` in `<head>` before the page's scripts,
+and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls. Deploy target: **Render**.
 
-**2026-07-10 (session 2)** — Persisted the **bin-tracker driver tool** (§3.1 NEXT #1's headline piece — it was the last
-big in-memory-only screen). Two parts: **(A)** the driver's own outputs now save — the whole driver day (`ij_binday_v1`),
-field bin weights (`ij_tares_v1` / `ij_weighins_v1`), and the morning gear-check log (`ij_tooldaily_v1`) — plus a fix so
-the driver's weigh events keep their bin code; **(B)** the tracker now reads the **real 75-bin fleet** from the DB instead
-of its hardcoded in-memory `seed()`, and every driver action (drop / pick / return / weigh / mark-fixed / pull-to-service)
-persists back through `apply_bins`. Verified end-to-end in the browser + DB (a pull-to-maintenance survived a reload) with
-no regression to the registry / yard screens that share `ij_bins_v1`.
+**Repo state:** clean tree, HEAD `618fe77`, Alembic head **`cdecca6a35e4`** (19 migrations; they live under
+`migrations/versions/`, NOT `alembic/versions/`). 12 routers, 34 synced keys. Login: **Manager / PIN 1111** or
+**Wes (owner) / PIN 4321**. Preview server: `.claude/launch.json` (name `api`) runs plain uvicorn with **no `--reload`** →
+restart it after any Python edit. Owner Hub has a *second* gate (owner password + sim 2FA) — the prototype's own demo;
+call `unlock()` to skip in browser tests.
 
-**2026-07-10 (session 1)** — Finished the **reference-data write-back** cluster (every owner-editable screen now saves to
-Postgres *and* the booking consumes those saved rates), retired the booking's demo customers, added two empty editable
-waste-class spots, and built the **§11 ready-to-invoice queue** on the owner hub. Also fixed a serving bug that was
-silently breaking the owner-hub dashboard. Victoria is now a broadly complete, backed, multi-user app behind the
-approved prototypes; the remaining big pieces are the rest of field/dispatch persistence (day-board overlays, breaks +
-attendance), the external integrations (Twilio/Square/Dropbox — need creds), and Nanaimo phase 2.
-
-**Stack:** FastAPI + SQLAlchemy 2 + Alembic + Postgres (Render, via `.env`). Python 3.14. Serves the approved
-`/prototypes` HTML **untouched** — real DB data is injected inline as `localStorage` in `<head>` before each page's
-scripts run, and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls and
-override the prototype's hardcoded constants with real data. Deploy target: Render.
-
-**Repo state:** clean working tree, Alembic head **`f209105d0be8`**
-(migrations live under `migrations/versions/`, NOT `alembic/versions/`). Login: **Manager / PIN 1111** or **Wes (owner) /
-PIN 4321**. Preview server config: `.claude/launch.json` (name `api`); it runs plain uvicorn with **no `--reload`**, so
-restart the preview server after any Python edit. Owner Hub has a *second* gate (owner password + simulated 2FA) — it's
-the prototype's own client-side demo; in browser tests call `unlock()` to skip it.
-
-Reference docs (authoritative; a spec wins where it goes deeper): `island-junk-SPEC-scheduling-and-dispatch.md`,
+Authoritative reference docs (a spec wins where it goes deeper): `CLAUDE.md`, `island-junk-SPEC-scheduling-and-dispatch.md`,
 `island-junk-SPEC-login-sessions-and-access.md`, `island-junk-SPEC-sms-and-texting.md`, `docs/data-model.md`,
-`island-junk-CURRENT-VERSIONS.md`, and `CLAUDE.md`.
+`island-junk-CURRENT-VERSIONS.md`.
 
 ---
 
-## 1. DONE (whole build, verified against Render)
+## 1. DONE (whole build — all verified against the live Render DB)
 
-**Foundation & data**
-- Calendar **stack-order spike PROVEN** (`/spike`): `orderBy=startTime` recovers the manager's manual top-to-bottom stack.
-- Brand-tagged base/mixins, config, **PIN auth + owner-only guard** (logic layer, not just hidden UI).
-- **30 tables via 11 Alembic migrations.** Seeded: 75-bin fleet, 15-person roster (PINs `0000` placeholder), Victoria
-  rate card, trucks #3–7, colour map + starter colour→truck, disposal facilities/materials + rate history, area surcharges.
-- **Reference data from DB** (`app/web/refs.py`): fleet, colour map, bins, employees, rates (facilities/materials/
-  **surcharges/custom-customers**), incidents, clock, field-jobs, weigh, maintenance doc, defect flags, reminders,
-  residential/company customers, PM tree, contracts. None-until-data so a screen keeps its demo until real rows exist.
+**Foundation**
+- Calendar **stack-order spike proven** (`orderBy=startTime` = the manual top-to-bottom stack). Brand-tagged base/mixins,
+  config, **PIN auth + owner-only guard** at the logic layer. ORM registry via `app.models.all`.
+- Schema: **~40 tables, 19 migrations.** Seeded: 75-bin fleet, 15-person roster (PINs `0000`), Victoria rate card, trucks
+  #3–7, colour map + colour→truck, disposal facilities/materials + rate history, area surcharges.
+- **Refs → DB** (`app/web/refs.py`): every `ij_*` key a screen reads is injected from Postgres, `None`-until-data (screen
+  keeps its demo until real rows exist). **Sync → DB** (`app/web/sync_handlers.py` + `sync-bridge.js` whitelist, 34 keys):
+  every user write persists via `POST /sync`.
 
 **Booking / dispatch**
-- **Booking engine** — `POST /booking` writes the Job + **ONE Sage event to the TEST calendar** (live-calendar guard
-  enforced). All 7 lanes wired via `booking-bridge.js`; a **full Bins booking** was driven end-to-end in the browser.
-- **Day-Board reader** — `GET /day-board` drops `#` manager notes → colour→truck → **stack order = route order** →
-  headline time. (`is_manager_note` + `parse_headline_time` unit-tested.)
-- **Booking now reads the saved rate sheet** (`booking-bridge.js::applyRateSheet`): residential `RES` (loads/min/labour/
-  GST/parking/items), commercial `COMM` (loads + included-minutes), and `binBase`/`binSurFor` all read `ij_rates_v1`
-  (added to the new-booking ref keys). Browser-verified live (edited a DB rate → booking reflected it → tracked back).
-- **Demo customers retired** — `retireDemoCustomers` empties the const `QB_CUST`/`QB_COMM` in place once real customers
-  are injected; only the imported 2,173 + 824 show, nothing demo merges/syncs.
+- **Booking** — `POST /booking` writes the Job + **ONE Sage event to the TEST calendar** (guard-enforced). 7 lanes wired
+  (`booking-bridge.js`); reads the saved rate sheet. Auto-sends a booking-confirm SMS (best-effort).
+- **Day-Board reader** — `GET /day-board`: drops `#` manager notes → colour→truck → stack order = route order → headline
+  time. Enriches each stop from the linked Job (incl. `customer_phone` for the on-our-way text).
 
-**Crew/yard/owner day → Postgres (write-coverage)**
-- Whole crew day persists via generic `/sync` (`sync-bridge.js` whitelist) + a dedicated yard endpoint: **bins, roster
-  (owner-guarded), incidents, clock in/out, field-job completion, yard weigh, and the rich yard-processing record**
-  (waste class, stream %, gross/tare/net, dump fee). Yard `#wDone` full sheet click-through browser-verified → margin.
-- **Maintenance + reminders + defect flags** persist: `maintenance_doc` (whole `ij_maint_v2` JSONB doc/brand),
-  `defect_flag` (`ij_fixes_v1` + `ij_fixes_resolved_v1`), `reminder` (`ij_reminders_v1`, done=absent reconcile).
+**Persistence (all localStorage tools now back to Postgres)**
+- **Bin-tracker driver tool** — reads the real 75-bin fleet (`ij_bins_full_v1`) instead of in-memory `seed()`; every action
+  (drop/pick/return/weigh/mark-fixed) persists via `apply_bins`. Driver day/weights/gear (`bin_driver_day`, `bin_weigh`,
+  `tool_daily_log`).
+- **Day-board overlays** (`dayboard_overlay`, atomic `ON CONFLICT`), **attendance/breaks**, **day-notes**, **brand
+  settings** KV, **hands-on pre-check**, **crew checklist templates**, **PM PO#s**, **reviews**, **consumables usage**,
+  **trucks** (`apply_fleet`) + **colour→truck map** (`apply_colourmap`, status/sage colours protected — Make.com).
+- Crew/yard/owner day: bins, roster (owner-guarded), incidents, clock in/out, field-jobs, yard weigh + rich yard-processing
+  record (waste class, %/gross/tare/net, dump fee → margin). Maintenance doc, defect flags, reminders.
 
-**Bin-tracker driver tool → Postgres (was in-memory only) — COMPLETE**
-- **Part A — the driver's own outputs persist** (3 new tables in migration `44049978642e`): `bin_driver_day`
-  (`ij_binday_v1`, the whole sign-in→walk-around→gear→odo→clock→EOD day, verbatim JSONB, keyed brand+driver+date,
-  **write-only** — a shared tablet must not restore another driver's day, and same-device localStorage already restores);
-  `bin_weigh` (`ij_tares_v1` + `ij_weighins_v1`, current field weight per bin, row-per-key, per-key upsert so a concurrent
-  device isn't clobbered, **echoed back** to the driver + yard); `tool_daily_log` (`ij_tooldaily_v1`, morning gear check,
-  keyed brand+truck+date, write-only). Also **fixed `apply_weigh`**: the driver writes `ij_weighlog_v1` with `code`/`kind`
-  (yard uses `bin`/`source`) — the handler now accepts either, so driver weigh events keep their bin code (was landing as
-  `bin=NULL`).
-- **Part B — the tracker reads + persists the REAL fleet.** The prototype built its fleet in memory (`let bins=seed()`)
-  and never touched `ij_bins_v1`, so the injected fleet was ignored and every driver action vanished on reload. New
-  `bin-tracker-bridge.js` reassigns the shared `bins` global from a rich, tracker-shaped injection (`ij_bins_full_v1`, new
-  builder `build_bins_full_v1`) and wraps `render()` (the choke point every board action funnels through) to write `bins`
-  back to `ij_bins_v1` → sync → `apply_bins`. `apply_bins` was expanded to absorb the tracker's rich write (`status` +
-  drop/pick/weigh/repair fields) **present-key-only**, accepting `status` (tracker) OR `state` (registry/yard); it also now
-  persists the yard's `cleared` roofing summary. **`build_bins_v1` stays lean on purpose** — registry + yard-hub +
-  yard-processing read that unchanged, so they're untouched (regression-verified: they still load the lean `state` shape).
-  Browser-proven: real 75-bin fleet loads (16-04 shows DB state, not the seed's demo rental), a pull-to-maintenance +
-  repair note synced to the DB and survived a reload; lean registry/yard write path also re-verified via API.
+**Owner tools**
+- **Ready-to-invoice queue** (`GET /invoice-queue`): commercial field-jobs + processed bins (with disposal margin) +
+  overdue roll-offs. **Never invoices/charges.** Owner-hub sheet has a **48-hour CC-charge clock** button + **Square
+  payment-link** button per item.
+- **CC-charge reminder** (§9/§11): `POST /reminders/cc-charge`, 48h = 2 working days (skips weekends + BC stats). Off-board
+  "CC Charge Reminders" calendar is LIVE (Flamingo → purple on paid).
+- **Disposal cost model** (`compute_load_margin`, `GET /disposal/margins`). **QuickBooks import** (§13): 2,173 residential
+  + 824 company imported. **Rate-sheet write-back** cluster (rates, facilities/materials, surcharges, custom customers).
 
-**Field/dispatch persistence — day-board overlays + attendance/breaks + office notes/config (COMPLETE)** — migration
-`84b98fe168ce` (5 tables):
-- **`dayboard_overlay`** (one row per brand+calendar-event-id) collapses the three day-board crew overlays:
-  `ij_dayboard_status_v1` (status override), `ij_dayboard_notes_v1` (crew note), `ij_dayboard_sitelog_v1`
-  (`{start,finish,loc}`). Notes + sitelog **reconcile-clear on absence** (the prototype deletes the key when emptied;
-  the injected full set makes the device authoritative); status is grow-only. Because 3 sync keys write the SAME row,
-  the upsert is an **atomic `ON CONFLICT`** (`_overlay_upsert`) — a plain select-then-insert raced + dropped a column
-  when two overlays were set in the same 400 ms debounce window.
-- **`attendance`** (`ij_attendance_v1` → row per brand+date+name; status/note/lateTime) and **`break_log`**
-  (`ij_breaks_v1` → row per brand+name+date; verbatim doc + `total_minutes` lifted out). Upsert-only (permanent HR).
-- **`day_note`** (`ij_daynotes_v1` → row per brand+date; bin/yard/handson columns, **per-shift present-key** so a hub
-  setting one shift never blanks the others) and **`brand_setting`** (generic brand KV; homes `ij_binsout_cfg_v1` =
-  `{days}` and future 1-off settings).
-- Injected on the screens that read them: day-board (overlays), owner/manager hubs (attendance/breaks/daynotes/binsout),
-  bin-tracker + truck-hub + yard-hub (daynotes), employee-hours (breaks), bin-registry (binsout). All None-until-data.
+**Global brand-switching (Nanaimo keystone, §3)** — owner-hub Victoria↔Nanaimo switch is now global. `POST /auth/brand`
+sets `session.active_brand`; serving + owner reads resolve it via `app.api.deps.active_brand_for`. **Never-mix (§15):**
+pages stamped `window.__IJ_BRAND`; sync writes the page's brand for the owner, **hard-forces crew to their own brand**.
+Verified reversible + isolated. Unblocks Nanaimo setup via the existing screens (no new UI).
 
-**Owner invoicing — 48-hour clock button** — the ready-to-invoice sheet (`owner-hub-bridge.js`) now shows a
-"Residential? Start 48-hour e-transfer clock" button per processed bin; it fires `POST /reminders/cc-charge` (idempotent
-per customer+addr+day), shows the due date inline, and the charge stays manual (§2). Queue bin items now carry `address`.
-Browser-verified: button → reminder (due skips the weekend) → mirrored to the reminder calendar → cleaned up.
+**Calendars (all off-board / TEST — never a live dispatch calendar)** — booking→TEST cal; CC-charge→reminder cal;
+**punch-time mirror** (`apply_clock` → one event per person per day, clock-in→out, on the shared "PUNCH TIME - TEST" cal).
+Three isolated writable targets, each guard refuses the other two + the live IDs.
 
-**Twilio SMS integration — BUILT (dry-run until creds), first of the integrations** (migration `f209105d0be8`:
-`sms_opt_out` + `sms_message`). Built to `island-junk-SPEC-sms-and-texting.md`, creds-gated exactly like the calendar —
-absent creds → **dry-run** (composes + logs, never sends), activates when Wes puts Twilio creds in `.env`.
-- **One shared send-only updates line `+17789065865`** (778-906-5865, both brands). `app/integrations/twilio_sms.py`
-  hard-refuses sending from the manager MAIN lines (Vic +17789665865 / Nan +17789775865, §2.6 never-list) — verified the
-  guard rejects a main-line sender. `twilio` is **lazy-imported** (not needed until creds), added to `requirements.txt`.
-- **Outbound templates** (`app/sms/messages.py`, pure/tested): booking confirm · on-our-way · next-customer ETA
-  (crew-entered) · reminder · residential completion (price + GST + e-transfer email + "put your address in the memo").
-  Every message **names its brand**; **no message ever contains a card number** (§5) — asserted in the test.
-- **Inbound reply routing** (`app/sms/routing.py` + `service.py`): STOP/HELP/START handled FIRST (opt-out honoured), else
-  the "unmonitored line" auto-reply pointing the customer to the RIGHT main line — recognised Victoria → 778-966-5865,
-  Nanaimo → 778-977-5865, unknown → both (matched by last-10-digits against the customer tables). Every message logged.
-- **Endpoints:** `POST /sms/inbound` (Twilio webhook → TwiML, optional signature validation), `POST /sms/send`
-  (owner/manager; composes server-side by `kind` so the brand/no-card rules can't be bypassed), `GET /sms/status`,
-  `GET /sms/log`. Verified end-to-end in dry-run (webhook TwiML, opt-out/opt-in, dry-run compose+log).
-- **LIVE (2026-07-12):** Wes's Twilio creds in `.env` (Full account, updates line `+17789065865`, SMS+MMS). Outbound
-  **delivered end-to-end** (real test text + the manager nudge both confirmed `delivered` by Twilio). Inbound still needs
-  the public deploy + webhook.
-- **Manager nudge (§3.3 — the "who's it from?" fix):** an inbound customer reply is forwarded to the manager's phone WITH
-  context — `📱 Island Junk Solutions — reply from Jane Ratepayer (…) · 12 Oak St: "I'm not home yet…"` — because the app
-  recognises the sender (`routing.find_customer_context` → name/address/brand). Target = per-brand `manager_notify_*`
-  (`.env`) else the brand's main line. Sent from the updates line (the from-guard still forbids the main lines). Verified
-  delivered to Wes's cell.
-- **Owner-editable message wording:** `ij_owner_cfg_v1` (the owner-hub's per-brand config — profile + `templates`
-  {confirm→booking_confirm, enroute→on_our_way, reminder, complete→completion} + apps/tax/msgOn) now **persists** —
-  `apply_owner_cfg` splits the `{victoria,nanaimo}` doc into per-brand `brand_setting` rows (owner-only); `build_owner_cfg_v1`
-  reassembles both. `app/sms/templates.py::render` uses the owner's edited template (placeholders {name}/{date}/{total}/
-  {address}/{etransfer}/…) if set, else the built-in — so **"change the texts" = edit them in the Owner Hub**. All sends go
-  through `render` (`/sms/send` + the booking hook). Verified: a saved custom template flowed to the sender; un-edited →
-  built-in. Injected on owner-hub + residential-calc + commercial-form + manager-hub.
-
-**Square + Dropbox integrations — BUILT (dry-run until creds)** — same creds-gated pattern, no new tables (stateless
-wrappers via `httpx`):
-- **Square** (`app/integrations/square_pay.py`, `POST /square/payment-link` owner/manager, `GET /square/status`) — creates
-  a Square hosted **payment LINK** for a job amount; there is deliberately **no charge/refund call** anywhere (§2/§3 —
-  the app never charges). Dollars → cents, CAD, sandbox/production via `.env`. Dry-run returns a placeholder.
-- **Dropbox** (`app/integrations/dropbox_files.py`, `POST /dropbox/job-photo`, `GET /dropbox/status`) — auto-files a job
-  photo (data-URL from the crew form) into a **per-job folder under the configured TEST root**; every upload asserts the
-  path is inside `dropbox_root` (guard verified to refuse an outside path, §2/§4). Dry-run uploads nothing.
-
-**Follow-up reviews — full send system (§11, Wes 2026-07-12)** — reviews can now be SENT (they only tracked before),
-streamlined per Wes's spec, migration `cdecca6a35e4` (phone/account/sent_at/sent_to on `followup_review`):
-- **Engine** (`app/reviews/service.py` + `app/api/reviews.py`): `POST /reviews/send` composes the review ask (owner
-  `review` template + Wes's REAL Victoria Google link `g.page/r/CYpCB7lEXE6yEAE/review`), sends from the updates line, and
-  **dedups two ways so no customer is asked twice** — (1) this record already sent, (2) this phone got a review within 60
-  days (customer-level). `GET /reviews` = the board (pending vs sent, residential + commercial). Verified live: sent +
-  delivered, both dedup gates block a re-send.
-- **Phone resolution:** explicit → the record → a **unique exact name match** in the customer list (`apply_reviews`
-  enriches; ambiguous names never auto-resolve, so we can't text the wrong person).
-- **Manager board** (`manager-hub-bridge.js`): the follow-up-reviews board's "Send review" button now really sends (was
-  mark-only) — handles sent / already-asked / no-phone. **Commercial included:** a completed commercial `field_job` spawns
-  a review record (`apply_field_jobs`), phone resolved by company name.
-- **Crew at job-end** (`residential-calculator-bridge.js`): the paid-on-site review modal gets a "Send review from the
-  Island Junk line" button (tracked + deduped) beside the crew's own "Open in Messages". All bridges additive/best-effort.
-- **Nanaimo review link** still TBD (set when Nanaimo goes live).
-
-**Punch-time calendar mirror — LIVE** (migration `a5abfdbdebfc` adds `clock_punch.gcal_event_id`) — Wes shared the
-"PUNCH TIME - TEST" calendar (`c_1033bcf8…`) with the service account (writer). `apply_clock` now mirrors each punch to
-it best-effort: **one event per person per day**, updated in place clock-in → clock-out (a timed shift block
-`Name · 7:30am–3:30pm · #5` when both times parse, else an all-day/"working" marker). New `app/integrations/gcal.py`
-helpers `parse_clock`, `punch_calendar_accessible`, `upsert_punch_event`, `delete_punch_event` behind a new
-`_assert_punch_calendar` guard. **Guard isolation re-verified:** the punch guard refuses live×2 + primary + TEST +
-reminder; the test/reminder guards refuse the punch calendar — three isolated writable targets, live calendars
-hard-refused. Browser/DB-verified: clock-in created the event, clock-out updated the *same* event to the timed shift;
-test event + row deleted after. (Chosen **per-day** over per-punch — matches the one-ClockPunch-per-person-per-day model;
-easy to switch if Wes wants per-punch. Single calendar for now; per-brand Nanaimo punch calendar is a later config add.)
-
-**Trucks + colour→truck map now editable/persisted (§6)** — `apply_fleet` (`ij_fleet_v1` = `{num:{mgr}}`) upserts the
-dispatch-truck roster by (brand, num) with its lead; a truck dropped from a present non-empty set is **soft-removed**
-(`active=False`, history survives §7). `apply_colourmap` (`ij_colourmap_v1`) sets `assigned_truck` on **assignable**
-colours ONLY — **status + sage colours are never touched** (Make.com keys ad-conversion off the status colours, §5/§15).
-Verified: a payload trying to reassign flamingo(status) was skipped while banana(assignable) updated; both models already
-existed (no migration) and their builders already inject on the hubs, so this closes the §13 "people & trucks / bins &
-colour map" editing gap for **both** brands. (Follow-up: creating owner-added **custom** colour rows needs their hex/
-colorId — skipped for now, not lost.)
-
-**Global brand-switching — the Nanaimo keystone (§3, approved by Wes 2026-07)** — the owner-hub's existing
-Victoria↔Nanaimo switch is now THE workspace switch: everything the owner sees/edits follows it.
-- **`POST /auth/brand`** (owner-only) sets `session.active_brand`; **`app/api/deps.py`** gains `active_brand_for`
-  (owner → session brand, crew → locked brand, default Victoria), `get_active_brand`, and `optional_brand` (resolves a
-  served page's brand without requiring auth). Serving (`app_screen`/`main_hub`) + owner reads (invoice-queue, disposal,
-  reminders, customers, yard) now resolve the active brand.
-- **Never-mix (§15) safeguard:** each served page is stamped `window.__IJ_BRAND`, and **`sync-bridge.js` sends that brand
-  with every write** — the sync endpoint writes to the *page's* brand for the owner, but **hard-forces crew to their own
-  brand** regardless of payload (a Victoria page can never write to Nanaimo). Verified: owner switch routes Nanaimo edits
-  to Nanaimo, Victoria untouched; a crew member sending `brand:nanaimo` was forced to Victoria; crew `POST /auth/brand` →
-  403. `owner-hub-bridge.js` aligns the prototype's client `BRAND` to the served brand and makes the switch persist +
-  reload so every screen follows. Browser-verified end-to-end + reversible.
-- **This unblocks Nanaimo setup via the existing approved screens** (rate-sheet, employees, bins, customers) — no new
-  "setup" screen needed (Wes's call). **Caveats:** the day-board + booking still resolve brand the old way (calendar-bound;
-  Nanaimo has no calendar yet — integration phase). Multi-tab: a stale page still syncs to the brand IT was served with
-  (that's the safe behavior); reads use the session brand.
-
-**Operational tail — PM PO#s to chase** — migration `56b3b57eb7b6` (`po_chase`): `ij_po_needed_v1` (property-mgmt /
-municipal net-30 PO#s to collect before invoicing; created by the booking, chased in the hubs) upserts by `id` via
-`apply_po_needed` (owner/manager-guarded). Its demo sample is suppressed by injecting the client seed-guard flag
-`ij_po_seeded_v1` = "1" (so `poSeed()` short-circuits), belt-and-braces backed by the handler skipping any record still
-tagged "— SAMPLE". Verified: a real PO persisted while the SAMPLE was skipped. Injected on the owner/manager hubs + booking.
-
-**Operational tail — crew checklist templates** (no migration — generic `brand_setting`): `ij_checklists_v1` (the
-owner/manager-configurable walk-around + clock-out checklists per crew type) now persists via `apply_checklists`
-(owner/manager-guarded — a non-manager crew sync is rejected, verified) and injects on the owner-hub editor + the
-truck-hub / day-board / yard-processing consumers, so **the owner's checklist edits actually reach the crew tools**
-(before, they read their own built-in defaults). None-until-customized.
-
-**Operational tail — hands-on truck pre-check** — migration `70f23a968aa0`: **`precheck_log`** (`ij_precheck_v1`, one row
-per brand+truck+date; who/when/flagged + items JSONB). The parallel to the bin driver's walk-around (which rides in
-`bin_driver_day`); flagged items already raise `ij_fixes_v1` defect flags — this keeps the full inspection record.
-**Write-only** (in SYNCED, not injected — a shared tablet mustn't restore another crew's check). Round-trip verified.
-
-**Operational tail (slice 1) — reviews + consumables usage** — migration `e7b266ed5ed6`:
-- **`followup_review`** (`ij_reviews_v1`, §11 follow-up-reviews tool) — upsert by `id`, verbatim doc + name/sent/skipped
-  lifted. **`usage_event`** (`ij_usage_v1`) — append-only consumables ledger, deduped by (item, timestamp, type) both
-  against the DB **and within the payload** (a re-sync or a doubled event would otherwise 500 on the unique key).
-- Both builders return **`[]` (not None) when empty on purpose** — the injected empty array suppresses the prototype's
-  demo-seed *write* (`revList()`/`seedUsage()` persist fake rows to localStorage otherwise). Verified the manager-hub no
-  longer leaks demo reviews to the DB. Injected on the crew forms + hubs that read/write them.
-
-**Disposal cost model**
-- `scripts/seed_disposal.py`: 7 facilities + **26 materials** (24 + 2 empty editable spots) + rate history.
-- `app/yard/disposal.py::compute_load_margin`: charge = waste-class price × net tonnes; cost = the class's own cost, or
-  Σ(stream% × tonnes × stream cost) for a yard-sort class; margin = charge − cost. Costs read **live** from the registry.
-- Owner-only `GET /disposal/margins`. **Model confirmed w/ Wes:** mixed rates ($275 <50% wood / $245 ≥50%) = what we
-  charge (yard); clean/dirty wood ($80/$110) + sorted rates = what we pay (landfill).
-
-**QuickBooks customer import (§13)** — `app/customers/qb_import.py` reads a Customer Contact List in **CSV or Excel**
-(openpyxl; alias-mapped headers; multi-line address stitch; multi-number "Phone Numbers" → first number; field-length
-caps). Classifier handles a **no-Company-column** export via `infer_kind` (keyword/number/name-shape). Owner-only
-`POST /customers/import/preview|apply`, `GET /customers/summary`; `scripts/import_customers.py "<file>" [--apply]`.
-**Wes's `Victoria Customers.xlsx` imported: 2,173 residential + 824 company.**
-
-**CC-charge reminder (§9/§11)** — invoice-triggered, **48h = 2 working days** (`app/core/dates.py` skips weekends + BC
-stat holidays; Fri invoice → Tue). `POST /reminders/cc-charge` (invoice_date defaults today) → owner queue
-`GET /reminders?kind=cc_charge` + `POST /reminders/{id}/done`. **Off-board Google reminder calendar is LIVE** (calendar
-"CC Charge Reminders" shared with the service account): a new reminder creates a Flamingo all-day event on the due date;
-marking paid recolours it **purple/Grape**. Guarded to that calendar ONLY (dispatch + TEST calendars hard-refused). The
-charge itself is always manual.
-
-**Reference-data write-back — CLUSTER COMPLETE (every owner edit saves)**
-- **Rate sheet** (`apply_rates`, owner-only): rate_card scalars + JSONB, disposal facilities + materials (rate history on
-  change; owner-authoritative reconcile within a present non-empty list), **area surcharges** (regular + `roofing_bin_amount`),
-  and **custom customers** (`ij_rates_v1.customers[]` → `contract` `rc_*`, extras in `properties`). Screen registered at
-  `/app/rate-sheet`.
-- **Customers** (`apply_customers` / `apply_company_customers`): upsert-only (never delete-by-absence; the list is thousands).
-- **PM tree** (`apply_pm`): nested company→group→building upsert, matched by DB-uuid id else name (no dup on re-sync).
-- **Contracts** (`apply_contracts`, `ij_contracts_v1`): near-1:1 model upsert; `build_contracts_v1` feeds the booking.
-
-**Owner ready-to-invoice queue (§11)** — `app/invoicing/service.py::invoice_queue`: completed commercial `field_job`s +
-processed yard bins (**with disposal margin**) + roll-off bins **overdue** (14+ days). Owner-only `GET /invoice-queue`.
-`owner-hub-bridge.js` replaces the hub's demo alerts with real counts + detail sheets (dropped the fake unpaid-invoices
-tile — that's QuickBooks data). **Never invoices/charges.** Browser-verified.
-
-**Endpoints:** `/auth/*`, `/booking`, `/day-board`, `/sync`, `/yard-processing`, `/disposal/margins`,
-`/customers/import/*` + `/customers/summary`, `/reminders*`, `/invoice-queue`.
+**Integrations** (`app/integrations/`, `app/sms/`) — creds-gated (dry-run until `.env` creds):
+- **Twilio SMS — LIVE (outbound).** One send-only updates line 778-906-5865 (both brands); **never sends from a MAIN line**
+  (guard). Outbound: booking-confirm, on-our-way, next-ETA, reminder, completion, **review** — each brand-named, no card
+  numbers. **Wording is owner-editable** in the Owner Hub (`ij_owner_cfg_v1.templates`, persisted per brand; `templates.py::render`
+  uses it, else built-in). Inbound reply routing (STOP/HELP first, then "unmonitored line → right main line") + the
+  **manager nudge** (reply forwarded to the manager with name/address). Endpoints `/sms/inbound|send|status|log`.
+- **Follow-up reviews — full send system (§11).** `POST /reviews/send` (real Victoria link `g.page/r/CYpCB7lEXE6yEAE/review`)
+  with **two-level dedup** (this record + this phone within 60 days). Phone resolved by unique customer-name match.
+  Manager board send button (`manager-hub-bridge.js`, res + commercial — commercial jobs spawn review records) + crew
+  job-end button (`residential-calculator-bridge.js`). `GET /reviews` = the board.
+- **Square** — `POST /square/payment-link` (payment LINK only, **no charge call exists**). **Dropbox** — `POST /dropbox/job-photo`
+  (files under the TEST root only; guard refuses outside paths). Both dry-run until creds.
 
 ---
 
-## 2. IN FLIGHT (nothing is mid-edit / broken — these are small open loops)
+## 2. IN FLIGHT (nothing broken — these are the exact open loops)
 
-- **Yard-waste "min $24" row** — Wes described yard-waste dump prices as min $24 / small $40 / medium $75 / large $100.
-  The size prices ($40/$75/$100) already live in the rate sheet's `yardWaste` rows and are editable/persisted. The distinct
-  **min $24** row is NOT added yet — waiting on Wes to confirm he wants it, then it's a small `yardWaste`-shape + rate-sheet
-  wire-up.
-- **Two empty waste-class prices** — `Mixed drywall (≥31%)` and `Concrete/clay tile` are seeded with a **blank** per-ton
-  charge (editable spots in the rate sheet). They cost out as soon as Wes fills the price; until then the margin marks them
-  uncosted (by design).
-- **CC-charge "start 48h clock" UI** — the endpoint + calendar mirror work; there's no button yet on an owner invoicing
-  screen to fire it when he sends a residential-bin invoice. Add the button when the owner invoicing UI is built.
+- **Twilio inbound is code-complete but not ACTIVE** — the reply-router + manager-nudge only fire when Twilio can POST to
+  `/sms/inbound`, which needs a **public URL (deploy)**. Files done: `app/api/sms.py`, `app/sms/{routing,service,templates}.py`.
+  What's left: deploy, then set the number's Messaging webhook to `POST https://<app>/sms/inbound`, and flip
+  `twilio_validate_signatures=true` in `.env`.
+- **Square + Dropbox** — fully built (`app/integrations/square_pay.py`, `dropbox_files.py`), returning dry-run placeholders.
+  What's left: add creds to `.env` (see §3) — no code.
+- **Deferred client SMS triggers** (endpoints ready, wiring pending a data/UX call): **residential completion** text (the
+  calc has no phone field — crew copies it today), **next-customer ETA** (needs the next stop's phone + a crew ETA-entry
+  step), **Dropbox photo filing** (no real photo source in the data model yet — §8 photos arrive at booking).
+- **Nanaimo review link** — `app/sms/templates.py::_REVIEW_LINK[Brand.nanaimo]` is `""`; set when Nanaimo is built.
 
 ---
 
 ## 3. NEXT (in order)
 
-1. **Field/dispatch persistence — DONE** (bin-tracker in session 2; day-board overlays + attendance/breaks + day
-   notes/config in session 3). The bin-tracker's shared punch mirror (`ij_punches_v1`) and its device-local day-board
-   handoff (`ij_active_day_v1`) were **intentionally left unpersisted** — the authoritative clock record already syncs
-   via `ij_clock_log`, and the handoff is ephemeral per-device state.
-   - **Punch-time calendar mirror — DONE** (calendar shared + wired + verified; see the DONE section). Open: confirm
-     per-day (chosen) vs per-punch with Wes; add a per-brand Nanaimo punch calendar when Nanaimo goes live.
-2. **Operational-tail persistence — essentially COMPLETE for the clean/useful keys.** Done this session: reviews, usage,
-   precheck, checklists, PO# (+ fleet/colour-map in the brand-switching arc). Only lower-value remainders left, each with a
-   caveat: **`ij_stock_v1`** (supplies stock levels — needs a **seeded catalog**: its `BASE`/`NEWITEMS` are the REAL
-   consumables list, not demo, so it's a "seed the catalog + persist onHand per item" feature like disposal, not a plain
-   sync; the important flow — used/restock deltas — is already in `ij_usage_v1`), **`ij_swing_log_v1`** (swing-board weigh
-   log — largely **redundant** with the already-synced `ij_weighlog_v1`), **`ij_bin_notes_v1`/`ij_bin_done_v1`** (couldn't
-   confirm a writer in the current bin-tracker — likely dead/renamed keys; verify before modelling). **Intentionally NOT
-   persisted** (device-local/ephemeral or already covered):
-   `ij_active_day_v1`, `ij_session_v1`, `*_seeded*` guards, `ij_resume_*` drafts, `ij_*_collapsed/open` UI state,
-   `ij_weighin_skips`, `ij_maint_snooze_v1`, `ij_punches_v1` + **`ij_yard_clock_v1`** (both feed the authoritative
-   `ij_clock_log`, which now also mirrors to the punch calendar — the yard clock-out already pushes into `ij_clock_log`),
-   `ij_signin_log_v1` (the `AuthSession` table is the authoritative sign-in record).
-3. **Integrations — ALL THREE BUILT (dry-run until creds).** To activate, Wes adds creds to `.env`:
-   - **Twilio SMS:** `twilio_account_sid`, `twilio_auth_token` (updates line `+17789065865` pre-set — change via `.env` if
-     the real number differs); set the Twilio Messaging webhook to `POST <public-base>/sms/inbound`; optionally
-     `twilio_validate_signatures=true`. No A2P 10DLC (CA local number).
-   - **Square:** `square_access_token`, `square_location_id`, `square_environment=production`. Payment links only, never charges.
-   - **Dropbox:** `dropbox_access_token` (leave `dropbox_root=/Island Junk TEST` until go-live).
-   **Client-side triggers WIRED this session (all dry-run safe, additive, non-blocking):** booking-confirm (server-side on
-   booking), **"On our way"** (day-board — the crew tap texts the customer; phone comes from the linked booked Job via a new
-   `customer_phone` field on the `/day-board` payload, never fuzzy; skipped when a stop has no Job/phone), and a **Square
-   payment-link button** on each ready-to-invoice item (owner-hub sheet, beside the 48h button). Verified in-browser: no
-   console errors, on-our-way composed + logged (dry-run), Square button → dry-run notice.
-   **Deferred to Wes's walkthrough (need a data/UX decision, NOT blocked on code):** the **residential completion** text
-   (the calc has no customer-phone field — the crew copies the text today; needs a phone field or the booking phone to flow
-   in), **next-customer ETA** (needs the NEXT stop's phone + the crew ETA-entry step), and **photo filing** (the real photo
-   source isn't in the data model yet — §8 customer-sent photos come in at booking; wire once that capture exists). The
-   `/sms/send`, `/square/payment-link`, `/dropbox/job-photo` endpoints are all ready for these.
-4. **Global brand-switching — DONE this session** (owner-hub switch is now global; owner-only; never-mix enforced).
-   **Trucks + colour map now syncable — DONE this session too** (`apply_fleet`/`apply_colourmap`, status colours protected).
-   Follow-ups: respect the active brand in the **day-board + booking** endpoints (deferred: calendar-bound, Nanaimo calendar
-   TBD); create owner-added **custom colour** rows on colour-map sync (needs hex/colorId); optional hardening — send the
-   page brand from the day-board/other read fetches too (multi-tab read consistency).
-5. **Nanaimo setup — now via EXISTING screens (Wes's call).** No dedicated "Set up this workspace" screen (no prototype +
-   would invent UI). With brand-switching live, the owner switches to Nanaimo and uses the existing rate-sheet (has a
-   "Copy Victoria's rate card" path via `apply_rates`), employee, bins, and customer-import screens. Blockers before it's
-   fully usable: the trucks/colour-map sync gap above, and the Nanaimo **calendar + Twilio + Dropbox + Square** (integration
-   phase). Nanaimo rate/customer/bin/employee data entry works today once switched.
-6. **Yard waste-class picker from the registry — DEFERRED (product decision).** The picker's `WASTE_CLASSES` is a curated
-   13-item list whose wording differs from `disposal_material.m` (e.g. "Construction/demo" vs "Construction / demo";
-   "Rubble" vs "Rubble (brick / tile / mortar)"), so a naive merge adds conceptual duplicates (13→~25). Needs a
-   `headline_class` flag on `disposal_material` + Wes confirming the pickable set + exact wording. Pricing is unaffected
-   meanwhile (the margin already reconciles labels).
+1. **Deploy to Render** — the gate for everything remaining. Turns on Twilio **inbound replies + the manager nudge
+   auto-firing**. After deploy: set the Twilio Messaging webhook → `POST https://<app>/sms/inbound`, set
+   `twilio_validate_signatures=true`. Confirm the app boots on Render against the existing DB (already migrated + seeded).
+2. **Square creds** → `.env`: `square_access_token`, `square_location_id`, `square_environment=production`. Then verify
+   `GET /square/status` = live and a payment-link creates a real Square URL.
+3. **Dropbox creds** → `.env`: `dropbox_access_token` (keep `dropbox_root=/Island Junk TEST` until go-live). Then decide the
+   real **photo source** (§8: customer photos at booking) and wire the crew forms → `/dropbox/job-photo`.
+4. **Wire the deferred SMS triggers** (completion text + next-ETA) once the phone-flow decision is made (carry the booking
+   phone into the calc / day-board, or add a confirm-number step).
+5. **Nanaimo review link + workspace data** — set the Nanaimo Google review link; when starting Nanaimo, drive setup through
+   the existing screens (brand-switch → rate-sheet "Copy Victoria", employees, bins, colour map, customer import) + stand up
+   its calendar/Twilio/Dropbox/Square.
+
+**Rotate the Twilio Auth Token** when convenient (it passed through chat): Twilio console → regenerate → swap `.env`.
 
 ---
 
 ## 4. OPEN DECISIONS (waiting on Wes — context in `docs/data-model.md`)
 
-- **Colour semantics that touch Make.com** (high-stakes — Make reads job status colour off the ISLAND JUNK VICTORIA
-  calendar and fires ad-conversion signals). Resolved in `docs/data-model.md` (2026-07-09) but **confirm before go-live**:
-  **Flamingo(4) = STATUS only** (residential unpaid — CC *or* e-transfer; never a truck), and the **bin truck = Graphite/
-  Blueberry** (Lavender stays a free assignable colour, NOT the bin truck). Preserve the exact colours Make keys on.
-- **7 booking lanes vs the brief's 5 types** — modeled as `booking_lane` (collect/invoiced/bins/pm/contracts/custom/pallet)
-  + `account_type` + bin `action`; §7's flat 5-value `type` was retired. Confirm this is the intended taxonomy.
+- **Colour semantics that touch Make.com (HIGH-STAKES).** Make reads job-status colour off the live ISLAND JUNK VICTORIA
+  calendar and fires ad-conversion signals, so these must be exact. Proposed in `docs/data-model.md` (2026-07-09), **confirm
+  before go-live:** **Flamingo(4) = STATUS only** (residential unpaid — CC *or* e-transfer; never a truck), and the **bin
+  truck = Graphite/Blueberry** (Lavender stays a free *assignable* colour, NOT the bin truck). `apply_colourmap` already
+  refuses to touch status/sage colours — but confirm the assignments themselves.
+- **7 booking lanes vs the brief's 5 types.** Modeled as `booking_lane` (collect/invoiced/bins/pm/contracts/custom/pallet)
+  + `account_type` + bin `action`; §7's flat 5-value `type` was retired. Confirm this taxonomy is intended.
 - **Real crew PINs** — all seeded `0000`; owner must set real per-person PINs before crew can log in.
-- **Bin truck's real dispatch number/label** — prototype's "12" is demo; the maintenance seed labels it "Bin truck (Hino) · #12".
-- **Two empty waste-class prices** + the **yard-waste `min $24` row** (see §2).
-- **QuickBooks export** — his real export had **no Company column** (handled by name-shape inference). A re-export *with*
-  the Company Name column would give an authoritative company/residential split; and **wood default** is clean $80 (Wes: no
-  preference) — flip to $110 in the rate sheet if mixed-load wood is usually treated.
-- **Access-flag canonical list** (`docs/data-model.md`) — confirm the 12 flags + owner-only-grantable set (owner/estimate/swing).
-- **Missing file** — `island-junk-nanaimo-setup-rates-v1.html` is referenced but not in the repo (only its store shape).
-- **June-2026 expanded palette** — the classic palette has only 3 hand-load colours, so only 3 of trucks #3–7 colour
-  distinctly; the full 24-colour set is needed to colour all five.
+- **Punch calendar** — chose **per-day** (one event per person per day) over per-punch; confirm. Nanaimo punch calendar TBD.
+- **Manager-nudge target** — Wes chose the **main line** (778-966-5865); this is already the default (no `.env` override).
+- **Yard waste-class picker** — deferred: `WASTE_CLASSES` wording differs from `disposal_material.m` ("Rubble" vs "Rubble
+  (brick/tile/mortar)"), so a naive merge dupes. Needs a `headline_class` flag + Wes confirming the pickable set + wording.
+- **Two empty waste-class prices** (`Mixed drywall (≥31%)`, `Concrete/clay tile`) + possible **yard-waste `min $24` row** —
+  fill in the rate sheet when Wes confirms.
+- **QuickBooks export** — his export had **no Company column** (handled by name-shape inference); a re-export *with* it gives
+  an authoritative split. **Mixed-load wood default** is clean $80 — flip to $110 in the rate sheet if usually treated.
+- **Bin truck real dispatch number/label** — prototype's "12" is demo (maintenance seed says "Bin truck (Hino) · #12").
+- **June-2026 expanded palette** — classic palette has only 3 hand-load colours, so only 3 of trucks #3–7 colour distinctly;
+  the full 24-colour set is needed to colour all five.
 
 ---
 
 ## 5. GOTCHAS (don't forget)
 
-- **Scheduling spec §4 — the "#" rule (STANDING RULE):** a **leading `#` in a Google Calendar event title = a manager-only
-  note the app ignores completely** (not a job, not dispatch). The day-board reader already drops these
-  (`app/dispatch/calendar_read.py::is_manager_note`). Build it into every future calendar reader too. *(Open: the spec's
-  `#3 truck` example reads like a typo for `Truck #3`; we implemented the plain leading-`#` = note rule — confirm.)*
-- **Calendar guard (NEVER weaken):** `app/integrations/gcal.py` hard-refuses the two live IDs (`LIVE_VICTORIA`, `LIVE_JOBS2`)
-  + `primary`. **Three isolated writable targets:** booking → the configured TEST calendar; CC-charge → the reminder calendar;
-  crew punches → the punch calendar. Each `_assert_*_calendar` guard allows ONLY its own target and refuses the other two +
-  the live IDs (re-verified 2026-07-10). Every calendar test creates a **real** event — delete it by id afterward.
-- **`_serve_prototype` injects before the LAST `</body>` only** (not replace-all) — some prototypes embed `</body>` inside
-  JS export-template strings (owner hub's PDF/print docs); a replace-all injects a `<script>` mid-string and kills that whole
-  script block. (`</head>` uses the FIRST match, which is the real page head.)
-- **Bridges mutate `const`s in place** — you can't reassign a top-level `const` (RES, QB_CUST, WASTE_CLASSES, OWNER_ALERTS)
-  from a later script, but you CAN mutate its properties / `.length`. That's how the booking/owner-hub bridges retrofit real
-  data without touching the prototype files.
-- **…but a top-level `let`/`function` you CAN reassign from a later appended classic script** — all classic (non-module,
-  sloppy-mode) scripts on a page share one global lexical environment, so `bin-tracker-bridge.js` reassigns the prototype's
-  `let bins = seed()` to the real fleet and wraps `function render()` to persist. Confirm the target prototype is classic
-  (no `type="module"`, no `use strict`) before relying on this. Persist on **change only** (snapshot-compare) so the
-  initial injected-fleet repaint doesn't echo the whole fleet back every load.
-- **`ij_bins_v1` is served in TWO shapes on purpose.** `build_bins_v1` = the **lean** registry `state` shape that
-  bin-registry + yard-hub + yard-processing read/write (unchanged — don't "unify" it into those screens). `build_bins_full_v1`
-  = the **rich** driver-tracker `status`+fields shape, injected ONLY on the bin-tracker as `ij_bins_full_v1` (inject-only,
-  NOT in the sync whitelist). Both derive from the same `Bin` row; the tracker persists its rich write back to `ij_bins_v1`.
-  `apply_bins` accepts BOTH (`status` wins over `state`) and is strictly **present-key-only**, so a lean write never blanks a
-  rich field it omits — this is the one guard that keeps the two shapes from clobbering each other. The `Bin` model already
-  carried every rich column (its docstring calls out the three-shape unification); only the two adapters needed widening.
+- **The "#" rule (STANDING RULE, scheduling spec §4):** a **leading `#` in a Google Calendar event title = a manager-only
+  note the app ignores completely** — not a job, not dispatch. The day-board reader drops these
+  (`app/dispatch/calendar_read.py::is_manager_note`). **Build this into EVERY future calendar reader.** (Open: the spec's
+  `#3 truck` example reads like a typo for `Truck #3`; we implemented the plain leading-`#` = note rule — confirm.)
+- **Calendar guard (NEVER weaken):** `app/integrations/gcal.py` hard-refuses the two live IDs `LIVE_VICTORIA`,
+  `LIVE_JOBS2` + `primary`. Three writable targets (TEST/reminder/punch); each `_assert_*_calendar` allows ONLY its own and
+  refuses the others. Every calendar test creates a **real** event — delete it by id afterward.
+- **Brand resolution — NEVER write `emp.brand or Brand.victoria` again.** Reads/actions: `active_brand_for(request, emp)`;
+  served pages: `optional_brand(request, db)`; **writes (sync) use the PAGE's brand** (`window.__IJ_BRAND`), and sync
+  **hard-forces crew to `emp.brand`**. New owner endpoints thread `request` + use `active_brand_for`. (day-board + booking
+  still on the old path — calendar-bound, intentionally deferred.)
+- **`ij_bins_v1` served in TWO shapes on purpose.** `build_bins_v1` = lean `state` shape (registry + yard read/write, don't
+  change). `build_bins_full_v1` → `ij_bins_full_v1` = rich `status`+fields shape, bin-tracker only (inject-only, not synced).
+  `apply_bins` accepts BOTH, **present-key-only** (a lean write never blanks a rich field).
+- **Bridges: mutate `const`s in place** (can't reassign a top-level `const`, but `.push`/`.length`/props work) — **BUT a
+  top-level `let`/`function` you CAN reassign** from a later appended classic script (shared global lexical env; e.g.
+  `bin-tracker-bridge.js` reassigns `let bins` + wraps `render()`). Only works on classic, sloppy-mode scripts (no
+  `type="module"`, no `use strict`).
+- **Demo-seed suppression:** some prototypes WRITE their seed to localStorage on render (`revList()`, `poSeed()`). Builders
+  that return `[]`-when-empty suppress it (reviews/usage); `ij_po_needed_v1` needs the injected `ij_po_seeded_v1="1"` flag.
+- **`_serve_prototype` injects before the LAST `</body>`** (some prototypes embed `</body>` in JS template strings; a
+  replace-all breaks that script). `</head>` uses the FIRST match.
 - **Alembic + shared `brand` enum:** autogenerate emits inline `sa.Enum('victoria','nanaimo', name='brand')` in every new
-  migration — hand-edit to a module-level `postgresql.ENUM(..., name='brand', create_type=False)`. New enums: create once
-  with `checkfirst=True` + `create_type=False` on columns (see the `reminder_kind` migration).
-- **Owner is `brand=NULL`** (shared). Any brand-scoped employee lookup MUST include brand-null
-  (`or_(brand==b, brand.is_(None))`) or you duplicate the owner.
-- **Brand resolution (post brand-switching): NEVER write `emp.brand or Brand.victoria` again.** Reads/actions resolve the
-  working brand via `app.api.deps.active_brand_for(request, emp)` (owner → `session.active_brand`, crew → locked
-  `emp.brand`); served pages via `optional_brand(request, db)`. **Writes (sync) use the PAGE's brand** (`body.brand` /
-  `window.__IJ_BRAND`), and the sync endpoint **hard-forces crew to `emp.brand`** — a page can never write another brand
-  for locked crew. New owner endpoints must thread `request` + use `active_brand_for`, not the old hardcode. (day-board +
-  booking are the two still on the old path — calendar-bound, intentionally deferred.)
-- **ORM registry:** `app/models/__init__.py` is intentionally EMPTY (avoids a base→types→enums cycle). Import
-  `app.models.all` to register every model; `new_session()` + Alembic env + `app.main` already do.
-- **Python 3.14 (bleeding edge):** plain `uvicorn` (not `[standard]`), `psycopg[binary]`, `pbkdf2_sha256` (not bcrypt),
-  `tzdata` (Windows has no tz DB), and **`openpyxl`** (xlsx import). All in `requirements.txt`.
-- **Refs vs sync:** refs inject inline in `<head>` (synchronous, before prototype scripts → no echo); `sync-bridge.js`
-  overrides `localStorage.setItem` at end of `<body>` → only *user* writes sync, and only for the `SYNCED` whitelist keys.
-  A builder returning `None` is skipped (no half-empty blob).
-- **Windows console renders `—` / `·` / `≥` / `≤` as `�`** in Bash output (DB stores correct UTF-8) — prefix Python one-liners
-  with `PYTHONIOENCODING=utf-8` when printing those. TestClient prints a harmless "httpx deprecated" warning.
+  table — hand-edit to a module-level `brand_enum = postgresql.ENUM(..., name='brand', create_type=False)` and add
+  `from sqlalchemy.dialects import postgresql` if the file lacks it (column-only migrations don't import it).
+- **Owner is `brand=NULL`** (shared) — brand-scoped employee lookups MUST include brand-null (`or_(brand==b, brand.is_(None))`).
+- **Python 3.14:** plain `uvicorn` (not `[standard]`), `psycopg[binary]`, `pbkdf2_sha256` (not bcrypt), `tzdata`, `openpyxl`,
+  `twilio>=9` (lazy-imported — only needed once creds are set). All in `requirements.txt`.
+- **`.env` keys** (git-ignored, UPPERCASE to match): `DATABASE_URL`, `SESSION_SECRET`, `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `TWILIO_UPDATES_LINE` (set). Not yet set: `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`,
+  `DROPBOX_ACCESS_TOKEN`, `TWILIO_VALIDATE_SIGNATURES`, `MANAGER_NOTIFY_*`.
+- **Windows console renders `—`/`·`/`≥` as `�`** in Bash output (DB stores correct UTF-8) — prefix Python one-liners with
+  `PYTHONIOENCODING=utf-8` when printing those.
 - **PII stays out of git:** `.gitignore` excludes `.env`, `**/service-account-key.json`, `**/.venv/`, `spike/out/`, and
-  customer exports (`*Customers*.xlsx` / `*.csv`). Verified: `.env`, the key, and `Victoria Customers.xlsx` are ignored.
+  customer exports (`*Customers*.xlsx` / `*.csv`).
 
 ---
 
 ## 6. HOW TO RESUME
 
-**Prereqs in place:** `.env` (Render `DATABASE_URL` + `SESSION_SECRET`), `spike/service-account-key.json` (Google creds).
-The Render DB is already migrated + seeded — steps 3–4 are only for a fresh DB.
+**Prereqs (in place):** `.env` (Render `DATABASE_URL` + `SESSION_SECRET` + Twilio creds), `spike/service-account-key.json`
+(Google creds). The Render DB is already migrated + seeded — steps 3–4 are only for a fresh DB.
 
 ```bash
 # from repo root (Windows paths; .venv already exists)
-.venv/Scripts/python.exe -m pip install -r requirements.txt          # 1. deps (incl. openpyxl)
+.venv/Scripts/python.exe -m pip install -r requirements.txt          # 1. deps (incl. twilio, openpyxl)
 .venv/Scripts/python.exe -c "import app.main; print('imports OK')"    # 2. sanity
-.venv/Scripts/alembic.exe -c alembic.ini upgrade head                # 3. migrate (head = d83e4b664737)
-# 4. seed (fresh DB only, IN THIS ORDER — colour_trucks needs trucks+colours):
+.venv/Scripts/alembic.exe -c alembic.ini upgrade head                # 3. migrate (head = cdecca6a35e4)
+# 4. seed (FRESH DB ONLY, in this order — colour_trucks needs trucks+colours):
 .venv/Scripts/python.exe -m scripts.seed_owner
 .venv/Scripts/python.exe -m scripts.seed_crew
 .venv/Scripts/python.exe -m scripts.seed_trucks
@@ -445,9 +206,10 @@ The Render DB is already migrated + seeded — steps 3–4 are only for a fresh 
 .venv/Scripts/python.exe -m uvicorn app.main:app                     # http://127.0.0.1:8000/app · /health
 ```
 
-Login: **Manager / 1111** or **Wes (owner) / 4321**. In browser tests, the owner hub's second gate (owner password + sim
-2FA) can be skipped by calling `unlock()`; prefer the API for auth (`POST /auth/login {pin, brand}` sets the cookie).
+Login: **Manager / 1111** or **Wes (owner) / 4321**. In browser tests the owner-hub's second gate is skippable via
+`unlock()`; prefer the API for auth (`POST /auth/login {pin, brand}` sets the cookie). Preview server: `preview_start`
+(name `api`) — restart it after any Python edit (no `--reload`).
 
-**Safety still in place (confirmed this session):** the `app/integrations/gcal.py` guard refuses the two live calendar IDs
-and writes only to the configured TEST + reminder calendars; `.gitignore` protects `.env`, the service-account key, and
-customer PII exports.
+**Safety confirmed this session:** `app/integrations/gcal.py` still hard-refuses the two live calendar IDs (`LIVE_VICTORIA`,
+`LIVE_JOBS2`) + `primary` and writes ONLY to the configured TEST / reminder / punch calendars; `.gitignore` still protects
+`.env`, `spike/service-account-key.json`, and customer PII exports (verified they are ignored).
