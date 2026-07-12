@@ -1,5 +1,19 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-12 (bin payments + calendar build STARTED)** — Wes approved a **4-workstream build** (spec:
+`docs/bin-payments-and-calendar-plan.md`) that reverses three guardrails *deliberately* (auto-paint status
+colours on the app's own calendar — never live; owner-pressed card charging via Square tokens; live
+read-only QuickBooks sync). Decisions locked: two calendar events per bin rental (drop + pickup, invoiced
+once after pickup), reference-code QB matching, customer-level saved card, **owner-only** charge, pre-auth
+rejected (auth expiry) in favour of card-on-file. **Shipped so far:** WS1 — Owner-Hub **"Bins awaiting
+payment"** queue + **"Received as e-transfer"** close-out (`owner-hub-bridge.js`, uses existing
+`/reminders` endpoints); WS2 — **auto-paint core** (`gcal.recolor_event` TEST-calendar-only +
+`app/dispatch/paint.py`; done→Basil, awaiting→Tomato; owner close-out colours never auto-painted; verified
+against the real TEST calendar). **NOT yet wired:** the crew-completion trigger that calls `paint_job_status`
+(next step). **Still to build:** WS1 two-event link + `BIN-xxxx` reference code; WS3 card-on-file (needs a
+Square **sandbox** app-id + token from Wes); WS4 QuickBooks sync (needs a QB **sandbox** + developer app).
+No new migration yet (kept to the live prod DB's existing schema). Make.com stays off.
+
 **2026-07-12 (LIVE on Render)** — **Deployed to production.** App is live at
 **`https://island-junk-ops.onrender.com`** (Blueprint `render.yaml`, Starter plan, Python 3.13, GitHub repo
 `IslandJunk/island-junk-ops`). Verified in prod: `/health`, PIN login (DB+auth), day-board reads the TEST calendar
