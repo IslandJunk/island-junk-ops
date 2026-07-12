@@ -18,6 +18,7 @@ from app.api.disposal import router as disposal_router
 from app.api.integrations import router as integrations_router
 from app.api.invoicing import router as invoicing_router
 from app.api.reminders import router as reminders_router
+from app.api.reviews import router as reviews_router
 from app.api.sms import router as sms_router
 from app.api.sync import router as sync_router
 from app.api.yard import router as yard_router
@@ -36,6 +37,7 @@ app.include_router(disposal_router)
 app.include_router(integrations_router)
 app.include_router(invoicing_router)
 app.include_router(reminders_router)
+app.include_router(reviews_router)
 app.include_router(sms_router)
 app.include_router(sync_router)
 app.include_router(yard_router)

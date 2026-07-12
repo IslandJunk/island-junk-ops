@@ -17,10 +17,10 @@ localStorage:
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,8 +33,12 @@ class FollowupReview(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
 
     source_id: Mapped[str] = mapped_column(String(60), nullable=False)
     name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    account: Mapped[str | None] = mapped_column(String(30), nullable=True)     # residential | commercial | property_mgmt
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)       # resolved so we can actually send
     review_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     skipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # dedup: don't re-send
+    sent_to: Mapped[str | None] = mapped_column(String(40), nullable=True)     # the number it went to
     doc: Mapped[dict] = mapped_column(JSONB, nullable=False)   # verbatim review record
 
 

@@ -26,10 +26,11 @@ _KIND_TO_TEMPLATE = {
     "completion": "complete",
     "review": "review",
 }
-# Default Google review link per brand (owner can override via owner-cfg `reviewLink`).
+# Google review link per brand (owner can override via owner-cfg `reviewLink`).
+# Victoria = Island Junk's real Google Business review URL (Wes 2026-07). Nanaimo TBD.
 _REVIEW_LINK = {
-    Brand.victoria: "https://g.page/r/IslandJunkVictoria/review",
-    Brand.nanaimo: "https://g.page/r/IslandJunkNanaimo/review",
+    Brand.victoria: "https://g.page/r/CYpCB7lEXE6yEAE/review",
+    Brand.nanaimo: "",   # set when Nanaimo goes live
 }
 
 

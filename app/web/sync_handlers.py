@@ -745,11 +745,33 @@ def apply_checklists(db: DbSession, brand: Brand, data, actor: Employee) -> dict
     return _apply_setting(db, brand, "ij_checklists_v1", data)
 
 
+def _review_phone_index(db: DbSession, brand: Brand) -> dict[str, str]:
+    """normalised-name -> phone, but ONLY for names that are UNIQUE in the customer list
+    (an ambiguous name maps to nothing, so we never guess a wrong number for a review)."""
+    counts: dict[str, int] = {}
+    phones: dict[str, str] = {}
+
+    def add(name: str | None, phone: str | None) -> None:
+        key = re.sub(r"[^a-z0-9]", "", (name or "").lower())
+        if not key or not phone:
+            return
+        counts[key] = counts.get(key, 0) + 1
+        phones[key] = phone
+
+    for r in db.scalars(select(ResidentialCustomer).where(ResidentialCustomer.brand == brand, ResidentialCustomer.phone.isnot(None))):
+        add(f"{r.first or ''} {r.last or ''}", r.phone)
+    for c in db.scalars(select(CompanyCustomer).where(CompanyCustomer.brand == brand, CompanyCustomer.phone.isnot(None))):
+        add(c.co, c.phone)
+    return {k: v for k, v in phones.items() if counts.get(k) == 1}
+
+
 def apply_reviews(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """`ij_reviews_v1` — the §11 follow-up-reviews list. Upsert by `id`; upsert-only (a
-    review record is a permanent 'who to ask' log, never delete-by-absence)."""
+    review record is a permanent 'who to ask' log). Resolves each customer's phone from the
+    customer list (unique exact name only) so the review can actually be sent."""
     if not isinstance(data, list):
         return {"upserted": 0}
+    idx = _review_phone_index(db, brand)
     n = 0
     for rec in data:
         if not isinstance(rec, dict) or not rec.get("id"):
@@ -761,8 +783,16 @@ def apply_reviews(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
             row = FollowupReview(brand=brand, source_id=sid)
             db.add(row)
         row.name = rec.get("name")
+        row.account = rec.get("account")
         row.review_sent = bool(rec.get("reviewSent"))
         row.skipped = bool(rec.get("skipped"))
+        # phone: explicit on the record, else a UNIQUE name match from the customer list.
+        ph = (rec.get("phone") or "").strip() or idx.get(re.sub(r"[^a-z0-9]", "", (row.name or "").lower()))
+        if ph:
+            row.phone = ph
+        # if the client already marked it sent, keep that as the dedup timestamp.
+        if row.review_sent and row.sent_at is None:
+            row.sent_at = _ms_dt(rec.get("reviewDate")) or datetime.now(timezone.utc)
         row.doc = rec
         n += 1
     db.commit()
