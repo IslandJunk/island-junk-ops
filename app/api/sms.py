@@ -29,6 +29,18 @@ def _twiml(reply: str | None) -> Response:
     return Response(content=xml, media_type="application/xml")
 
 
+def _public_url(request: Request) -> str:
+    """The public URL Twilio actually signed against. Behind Render's TLS proxy, request.url
+    can carry the internal http scheme/host, which would make Twilio signature validation
+    reject genuine requests — so trust the proxy's X-Forwarded-Proto / X-Forwarded-Host, which
+    reflect the public webhook URL (what Twilio used to compute the signature)."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = (request.headers.get("x-forwarded-host")
+            or request.headers.get("host") or request.url.netloc)
+    url = f"{proto}://{host}{request.url.path}"
+    return f"{url}?{request.url.query}" if request.url.query else url
+
+
 @router.post("/inbound")
 async def inbound(request: Request, db: DbSession = Depends(get_db)) -> Response:
     """Twilio inbound webhook (public, form-encoded). Handles the reply per spec §3 and
@@ -39,7 +51,7 @@ async def inbound(request: Request, db: DbSession = Depends(get_db)) -> Response
             from twilio.request_validator import RequestValidator
             sig = request.headers.get("X-Twilio-Signature", "")
             valid = RequestValidator(settings.twilio_auth_token).validate(
-                str(request.url), dict(form), sig)
+                _public_url(request), dict(form), sig)
         except Exception:
             valid = False
         if not valid:
