@@ -17,9 +17,12 @@ rejected (auth expiry) in favour of card-on-file. **Shipped + verified:**
   `28c686247d41`, applied). Endpoints: `POST /square/save-card` (manager), `GET /square/card-on-file`,
   `POST /square/charge-card-on-file` (**owner-only** — 403 for managers). All verified against **Square
   SANDBOX** end-to-end (save VISA ••5858 → owner charge $25.60 COMPLETED + audit row → manager blocked).
-  **Remaining WS3 = FRONTEND ONLY:** the Web Payments SDK card field at bin booking (tokenize → save-card)
-  + the **"Charge card on file"** button on the owner queue — both best done with Wes live (entering a
-  Square test card). `square_application_id` in config (public, for the SDK).
+  The **"Charge card on file" button** is DONE + verified live (owner queue → check card → invoice total →
+  +2.4% shown → charge → reminder closed; sandbox VISA ••5858, $100→$102.40 COMPLETED, audit row).
+  **Remaining WS3 = ONE thing:** the **Web Payments SDK card field at bin booking** (tokenize → save-card) —
+  needs Wes live to enter a Square test card (can't automate typing into Square's secure iframe).
+  `square_application_id` in config (public, for the SDK). NOTE: astral emojis (💳/💵) corrupt to lone
+  surrogates on serve here — keep bridge button text ASCII.
 
 **Square SANDBOX connected LOCALLY** — sandbox creds in the git-ignored local `.env`
 (`SQUARE_ENVIRONMENT=sandbox`, app id `sandbox-sq0idb-…`, location `L57750E6QHVHF` "Default Test Account" CAD).
