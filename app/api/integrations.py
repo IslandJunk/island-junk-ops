@@ -50,7 +50,9 @@ def square_status(emp: Employee = Depends(get_current_employee)) -> dict:
     return {"configured": square_pay.is_configured(),
             "mode": "live" if square_pay.is_configured() else "dry_run",
             "environment": settings.square_environment,
-            "application_id": settings.square_application_id}   # public, for the SDK card field
+            # public identifiers the Web Payments SDK card field needs on the frontend
+            "application_id": settings.square_application_id,
+            "location_id": settings.square_location_id}
 
 
 # ── Square card-on-file (WS3) — store a token, owner-pressed charge ────────────

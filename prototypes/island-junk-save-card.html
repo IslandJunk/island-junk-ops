@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Save card on file — Island Junk</title>
+<style>
+  :root{ --orange:#F05014; --ink:#141414; --paper:#F4F3F1; --card:#fff; --line:#E5E3DF; --muted:#8a857e; --green:#3CA03C; --amber:#E8A317; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:480px; margin:0 auto; padding:18px 16px 40px; }
+  .mk{ font-weight:800; letter-spacing:.02em; font-size:13px; color:var(--muted); }
+  .mk b{ color:var(--ink); }
+  h1{ font-size:26px; font-weight:800; letter-spacing:-.01em; margin:10px 0 4px; }
+  .sub{ color:var(--muted); font-size:14px; margin-bottom:16px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-left:5px solid var(--orange); border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(20,20,20,.04); }
+  label{ display:block; font-weight:700; font-size:13px; margin:12px 0 6px; }
+  input[type=text]{ width:100%; padding:12px; border:1.5px solid var(--line); border-radius:11px; font-size:15px; font-family:inherit; }
+  #ij-card-container{ min-height:52px; margin-top:4px; }
+  .authrow{ display:flex; gap:10px; align-items:flex-start; margin-top:14px; }
+  .authrow input{ margin-top:3px; }
+  .authrow span{ font-size:13px; color:#444; }
+  button.save{ width:100%; margin-top:16px; background:var(--orange); color:#fff; border:none; border-radius:12px; padding:14px; font-size:15.5px; font-weight:800; font-family:inherit; cursor:pointer; }
+  button.save:disabled{ opacity:.5; cursor:default; }
+  .note{ font-size:12px; color:var(--muted); margin-top:10px; line-height:1.45; }
+  .result{ margin-top:14px; font-weight:700; }
+  .result.ok{ color:var(--green); }
+  .result.warn{ color:#C0392B; }
+  .secure{ background:#eef7ee; border:1px solid #cfe6cf; color:#2f6b34; border-radius:10px; padding:10px 12px; font-size:12.5px; margin-bottom:14px; line-height:1.45; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mk">ISLAND JUNK <b>SOLUTIONS</b></div>
+    <h1>Save card on file</h1>
+    <div class="sub">Residential bin — for the 48-hour balance if it isn’t e-transferred.</div>
+
+    <div class="secure">The card is entered into <b>Square’s own secure field</b> and stored by Square.
+      This app never sees or stores the card number — only a token (e.g. “Visa ••1234”).</div>
+
+    <div class="card">
+      <label for="ij-cust">Customer name</label>
+      <input type="text" id="ij-cust" placeholder="e.g. Jade Smith" autocomplete="off">
+
+      <label>Card details</label>
+      <div id="ij-card-container"><div class="note" id="ij-card-status">Loading Square’s secure card field…</div></div>
+
+      <div class="authrow">
+        <input type="checkbox" id="ij-auth">
+        <span>The customer <b>authorized</b> keeping their card on file and being charged the balance
+          <b>+ 2.4%</b> if it isn’t e-transferred within 48 hours.</span>
+      </div>
+
+      <button class="save" id="ij-save" disabled>Save card on file</button>
+      <div class="result" id="ij-result"></div>
+      <div class="note">Owner charges the card manually from the reminder queue — nothing is ever auto-charged.</div>
+    </div>
+  </div>
+</body>
+</html>
