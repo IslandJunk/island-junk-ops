@@ -1,5 +1,15 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-12 (LIVE on Render)** — **Deployed to production.** App is live at
+**`https://island-junk-ops.onrender.com`** (Blueprint `render.yaml`, Starter plan, Python 3.13, GitHub repo
+`IslandJunk/island-junk-ops`). Verified in prod: `/health`, PIN login (DB+auth), day-board reads the TEST calendar
+(Google key via a Render **Secret File** at `/etc/secrets/service_account_key.json`), and — the point of deploying —
+**inbound SMS is now live**: a real text to the updates line routed through `/sms/inbound` → auto-reply + manager nudge,
+all confirmed in the live log. **`TWILIO_VALIDATE_SIGNATURES=true`** is on and validated (signed request accepted).
+Deploy-prep fixes this session: psycopg scheme normalization in both the app engine and alembic `env.py`; Google key path
+via `GOOGLE_SERVICE_ACCOUNT_FILE`; and Twilio signature validation reconstructs the **public** URL behind Render's proxy
+(`_public_url`). Secrets live in the Render dashboard (git-ignored `.env` is local-only). Runbook: **`DEPLOY.md`**.
+
 **2026-07-12 (later)** — Wired the last two **deferred customer-facing SMS triggers** (§10, spec §2): the residential
 **completion text** (crew sends price + GST + e-transfer from the calc's e-Transfer modal, with a confirm-number input →
 unique customer-name fallback) and the **next-customer ETA** (crew marks a stop done on the day-board and texts the *next*
@@ -93,12 +103,11 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
 
 ## 2. IN FLIGHT (nothing broken — these are the exact open loops)
 
-- **Twilio inbound is code-complete but not ACTIVE** — the reply-router + manager-nudge only fire when Twilio can POST to
-  `/sms/inbound`, which needs a **public URL (deploy)**. Files done: `app/api/sms.py`, `app/sms/{routing,service,templates}.py`.
-  What's left: deploy, then set the number's Messaging webhook to `POST https://<app>/sms/inbound`, and flip
-  `twilio_validate_signatures=true` in `.env`.
+- **Twilio inbound is LIVE** (2026-07-12) — deployed; the Messaging webhook points at
+  `POST https://island-junk-ops.onrender.com/sms/inbound` and `TWILIO_VALIDATE_SIGNATURES=true` is on + validated. Reply
+  routing + manager nudge confirmed against the live log.
 - **Square + Dropbox** — fully built (`app/integrations/square_pay.py`, `dropbox_files.py`), returning dry-run placeholders.
-  What's left: add creds to `.env` (see §3) — no code.
+  What's left: add creds **in the Render dashboard** (Environment tab; see §3) — no code.
 - **Client SMS triggers — completion + next-ETA now WIRED** (`POST /sms/completion`, `POST /sms/eta`, both crew-accessible,
   server-composed from the locked templates). Completion: the calc's e-Transfer modal gets a confirm-number input (blank →
   unique customer-name match) + send button (`residential-calculator-bridge.js`). Next-ETA: the day-board job sheet gets a
@@ -112,13 +121,12 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
 
 ## 3. NEXT (in order)
 
-1. **Deploy to Render** — the gate for everything remaining. Turns on Twilio **inbound replies + the manager nudge
-   auto-firing**. After deploy: set the Twilio Messaging webhook → `POST https://<app>/sms/inbound`, set
-   `twilio_validate_signatures=true`. Confirm the app boots on Render against the existing DB (already migrated + seeded).
-2. **Square creds** → `.env`: `square_access_token`, `square_location_id`, `square_environment=production`. Then verify
-   `GET /square/status` = live and a payment-link creates a real Square URL.
-3. **Dropbox creds** → `.env`: `dropbox_access_token` (keep `dropbox_root=/Island Junk TEST` until go-live). Then decide the
-   real **photo source** (§8: customer photos at booking) and wire the crew forms → `/dropbox/job-photo`.
+1. ~~**Deploy to Render**~~ — **DONE** (2026-07-12). Live at `https://island-junk-ops.onrender.com`; Twilio inbound +
+   manager nudge on and secured. See the top-of-file entry + `DEPLOY.md`. Env/secrets are set in the Render dashboard.
+2. **Square creds** → Render Environment tab: `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`, `SQUARE_ENVIRONMENT=production`.
+   Then verify `GET /square/status` = live and a payment-link creates a real Square URL.
+3. **Dropbox creds** → Render Environment tab: `DROPBOX_ACCESS_TOKEN` (keep `DROPBOX_ROOT=/Island Junk TEST` until go-live).
+   Then decide the real **photo source** (§8: customer photos at booking) and wire the crew forms → `/dropbox/job-photo`.
 4. ~~**Wire the deferred SMS triggers** (completion text + next-ETA)~~ — **DONE** (2026-07-12, phone-flow = confirm-number
    step with a unique-name fallback). Remaining SMS work is the completion **photo attachment**, which waits on Dropbox (step 3)
    to host an MMS-able URL for the job photo.
