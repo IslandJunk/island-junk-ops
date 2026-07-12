@@ -106,8 +106,11 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
 - **Twilio inbound is LIVE** (2026-07-12) — deployed; the Messaging webhook points at
   `POST https://island-junk-ops.onrender.com/sms/inbound` and `TWILIO_VALIDATE_SIGNATURES=true` is on + validated. Reply
   routing + manager nudge confirmed against the live log.
-- **Square + Dropbox** — fully built (`app/integrations/square_pay.py`, `dropbox_files.py`), returning dry-run placeholders.
-  What's left: add creds **in the Render dashboard** (Environment tab; see §3) — no code.
+- **Square is LIVE** (2026-07-12) — creds set in the Render dashboard; `GET /square/status` = live (production) and a real
+  payment link was created end-to-end (`https://square.link/...`). Owner-hub invoice-queue buttons now make real links.
+  Still no charge call (guardrail) — links only.
+- **Dropbox** — fully built (`app/integrations/dropbox_files.py`), still dry-run. What's left: add `DROPBOX_ACCESS_TOKEN`
+  in the Render dashboard (§3) + decide the photo source — no code.
 - **Client SMS triggers — completion + next-ETA now WIRED** (`POST /sms/completion`, `POST /sms/eta`, both crew-accessible,
   server-composed from the locked templates). Completion: the calc's e-Transfer modal gets a confirm-number input (blank →
   unique customer-name match) + send button (`residential-calculator-bridge.js`). Next-ETA: the day-board job sheet gets a
@@ -123,8 +126,8 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
 
 1. ~~**Deploy to Render**~~ — **DONE** (2026-07-12). Live at `https://island-junk-ops.onrender.com`; Twilio inbound +
    manager nudge on and secured. See the top-of-file entry + `DEPLOY.md`. Env/secrets are set in the Render dashboard.
-2. **Square creds** → Render Environment tab: `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`, `SQUARE_ENVIRONMENT=production`.
-   Then verify `GET /square/status` = live and a payment-link creates a real Square URL.
+2. ~~**Square creds**~~ — **DONE** (2026-07-12). `SQUARE_ACCESS_TOKEN` / `SQUARE_LOCATION_ID` / `SQUARE_ENVIRONMENT=production`
+   set in the Render dashboard; `/square/status` = live, real payment link verified.
 3. **Dropbox creds** → Render Environment tab: `DROPBOX_ACCESS_TOKEN` (keep `DROPBOX_ROOT=/Island Junk TEST` until go-live).
    Then decide the real **photo source** (§8: customer photos at booking) and wire the crew forms → `/dropbox/job-photo`.
 4. ~~**Wire the deferred SMS triggers** (completion text + next-ETA)~~ — **DONE** (2026-07-12, phone-flow = confirm-number
