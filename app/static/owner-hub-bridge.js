@@ -32,7 +32,7 @@
     }).then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
       if (res && res.url) {
         btn.parentNode.innerHTML = '<div class="meta" style="margin-top:8px;font-weight:700">'
-          + '💳 Payment link: <a href="' + esc(res.url) + '" target="_blank" rel="noopener">' + esc(res.url) + "</a></div>";
+          + 'Payment link: <a href="' + esc(res.url) + '" target="_blank" rel="noopener">' + esc(res.url) + "</a></div>";
       } else if (res && res.dry_run) {
         btn.textContent = "Square not connected yet (dry-run)";
       } else {
@@ -148,8 +148,57 @@
           btn.parentNode.innerHTML = '<div class="meta" style="margin-top:8px;color:#3CA03C;font-weight:700">'
             + "✓ Paid by e-transfer — closed out"
             + (res.calendar_updated ? " (calendar → purple)" : "") + ".</div>";
-        } else { btn.disabled = false; btn.textContent = "💵 Received as e-transfer"; }
-      }).catch(function () { btn.disabled = false; btn.textContent = "💵 Received as e-transfer"; });
+        } else { btn.disabled = false; btn.textContent = "Received as e-transfer"; }
+      }).catch(function () { btn.disabled = false; btn.textContent = "Received as e-transfer"; });
+  };
+
+  // "Charge card on file" (WS3, OWNER-ONLY) — check the customer's saved card, take the invoice
+  // total, charge it +2.4% (POST /square/charge-card-on-file), then close the reminder. The
+  // amount + card are shown before it fires; no auto-charge — one deliberate owner tap (§2).
+  window.__ijChargeCard = function (btn, reminderId, name, jobId) {
+    btn.disabled = true;
+    btn.textContent = "Checking card…";
+    fetch("/square/card-on-file?customer_name=" + encodeURIComponent(name || ""), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (cof) {
+        if (!cof || !cof.on_file) { btn.disabled = false; btn.textContent = "No card on file (save one at booking)"; return; }
+        var host = btn.parentNode;
+        host.innerHTML = "";
+        var lbl = document.createElement("div");
+        lbl.className = "meta"; lbl.style.cssText = "margin-top:8px;font-weight:700";
+        lbl.textContent = "Card on file: " + (cof.brand || "card") + " ••" + (cof.last4 || "");
+        var amt = document.createElement("input");
+        amt.type = "text"; amt.inputMode = "decimal"; amt.placeholder = "Invoice total $ (card adds 2.4%)";
+        amt.style.cssText = "width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #d8d3cc;border-radius:10px;font-size:15px;margin:6px 0";
+        var go = document.createElement("button");
+        go.className = "btn2"; go.style.cssText = "font-size:12.5px;padding:7px 10px"; go.textContent = "Charge card";
+        amt.addEventListener("input", function () {
+          var v = parseFloat(amt.value);
+          go.textContent = (v > 0) ? ("Charge $" + (v * 1.024).toFixed(2) + " to " + (cof.brand || "card") + " ••" + (cof.last4 || "")) : "Charge card";
+        });
+        go.addEventListener("click", function () {
+          var v = parseFloat(amt.value);
+          if (!(v > 0)) { amt.focus(); return; }
+          var total = Math.round(v * 1.024 * 100) / 100;
+          go.disabled = true; go.textContent = "Charging…";
+          fetch("/square/charge-card-on-file", {
+            method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer_name: name, amount: total, job_id: jobId || null, note: "Residential bin — card on file" }),
+          }).then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
+            if (res && res.charged) {
+              fetch("/reminders/" + encodeURIComponent(reminderId) + "/done", { method: "POST", credentials: "same-origin" }).catch(function () {});
+              host.innerHTML = '<div class="meta" style="margin-top:8px;color:#3CA03C;font-weight:700">✓ Charged '
+                + esc(res.brand || "card") + " ••" + esc(res.last4 || "") + " $" + total.toFixed(2) + " — closed out.</div>";
+            } else if (res && res.reason === "no_card_on_file") {
+              go.disabled = false; go.textContent = "No card on file";
+            } else {
+              go.disabled = false; go.textContent = "Try again";
+              var d = document.createElement("div"); d.className = "meta"; d.style.cssText = "margin-top:6px;color:#C0392B;font-weight:700";
+              d.textContent = "Declined: " + ((res && res.reason) ? String(res.reason) : "charge failed"); host.appendChild(d);
+            }
+          }).catch(function () { go.disabled = false; go.textContent = "Couldn’t reach the server"; });
+        });
+        host.appendChild(lbl); host.appendChild(amt); host.appendChild(go); amt.focus();
+      }).catch(function () { btn.disabled = false; btn.textContent = "Charge card on file"; });
   };
 
   function awaitingSheet(rems) {
@@ -158,10 +207,14 @@
         + esc(r.due) + " — else charge card on file +2.4%</div>") : "";
       var paidBtn = '<button class="btn2" style="margin-top:9px;font-size:12.5px;padding:7px 10px"'
         + ' onclick="__ijMarkPaid(this,' + JSON.stringify(String(r.id)).replace(/"/g, "&quot;") + ')">'
-        + "💵 Received as e-transfer</button>";
+        + "Received as e-transfer</button>";
+      var chargeBtn = '<div style="margin-top:2px"><button class="btn2" style="font-size:12.5px;padding:7px 10px"'
+        + ' onclick="__ijChargeCard(this,' + JSON.stringify(String(r.id)).replace(/"/g, "&quot;")
+        + ',' + JSON.stringify(r.name || "").replace(/"/g, "&quot;")
+        + ',' + JSON.stringify(r.job_id || "").replace(/"/g, "&quot;") + ')">Charge card on file</button></div>';
       return card("<b>" + esc(r.name || r.text || "Residential bin") + "</b>"
         + (r.addr ? ('<br><span style="color:var(--muted);font-size:12.5px">' + esc(r.addr) + "</span>") : "")
-        + due + paidBtn);
+        + due + paidBtn + chargeBtn);
     }).join("");
     if (!rows) rows = '<div class="meta" style="margin-top:10px">No bins awaiting payment.</div>';
     window.sheet("Bins awaiting payment (48h)",
