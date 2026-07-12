@@ -1,18 +1,30 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-12 (bin payments + calendar build STARTED)** — Wes approved a **4-workstream build** (spec:
+**2026-07-12 (bin payments + calendar build IN PROGRESS)** — Wes approved a **4-workstream build** (spec:
 `docs/bin-payments-and-calendar-plan.md`) that reverses three guardrails *deliberately* (auto-paint status
 colours on the app's own calendar — never live; owner-pressed card charging via Square tokens; live
 read-only QuickBooks sync). Decisions locked: two calendar events per bin rental (drop + pickup, invoiced
 once after pickup), reference-code QB matching, customer-level saved card, **owner-only** charge, pre-auth
-rejected (auth expiry) in favour of card-on-file. **Shipped so far:** WS1 — Owner-Hub **"Bins awaiting
-payment"** queue + **"Received as e-transfer"** close-out (`owner-hub-bridge.js`, uses existing
-`/reminders` endpoints); WS2 — **auto-paint core** (`gcal.recolor_event` TEST-calendar-only +
-`app/dispatch/paint.py`; done→Basil, awaiting→Tomato; owner close-out colours never auto-painted; verified
-against the real TEST calendar). **NOT yet wired:** the crew-completion trigger that calls `paint_job_status`
-(next step). **Still to build:** WS1 two-event link + `BIN-xxxx` reference code; WS3 card-on-file (needs a
-Square **sandbox** app-id + token from Wes); WS4 QuickBooks sync (needs a QB **sandbox** + developer app).
-No new migration yet (kept to the live prod DB's existing schema). Make.com stays off.
+rejected (auth expiry) in favour of card-on-file. **Shipped + verified:**
+- **WS1** — Owner-Hub **"Bins awaiting payment"** queue + **"Received as e-transfer"** close-out
+  (`owner-hub-bridge.js`, uses existing `/reminders` endpoints).
+- **WS2** — auto-paint **live end-to-end**: `gcal.recolor_event` (TEST-calendar-only) + `app/dispatch/paint.py`,
+  **wired** into `apply_dayboard_status` (crew marks a stop done → linked Job status + paint: bins→Tomato/red,
+  hands-on→Basil/green; transition-only; owner close-out colours never auto-painted).
+- **WS3 card-on-file BACKEND** — `square_pay.py`: `create_customer` / `save_card_on_file` (Cards API, token
+  only — never the PAN/CVV) / `charge_card_on_file` (Payments API, owner-pressed, idempotent, raises
+  `SquareError`). Verified against **Square SANDBOX** (save VISA ••5858, charge $25+2.4%=$25.60 COMPLETED,
+  idempotent, bad-card error). `square_application_id` added to config.
+
+**Square SANDBOX connected LOCALLY** — sandbox creds in the git-ignored local `.env`
+(`SQUARE_ENVIRONMENT=sandbox`, app id `sandbox-sq0idb-…`, location `L57750E6QHVHF` "Default Test Account" CAD).
+**Render still has PRODUCTION Square** (untouched). Test nonce `cnon:card-nonce-ok`.
+
+**Still to build:** WS3 — persist tokens (`stored_card` + `card_charge` tables/migration), the save-card +
+charge-card-on-file **endpoints**, the **Web Payments SDK card field** at bin booking + the **"Charge card on
+file"** button on the owner queue. WS1 — two-event link + `BIN-xxxx` reference code. **WS4 QuickBooks** — needs
+Wes's QB **sandbox + developer app** (dev.intuit.com; redirect URIs `.../quickbooks/callback`). No new
+migration yet. Make.com stays off.
 
 **2026-07-12 (LIVE on Render)** — **Deployed to production.** App is live at
 **`https://island-junk-ops.onrender.com`** (Blueprint `render.yaml`, Starter plan, Python 3.13, GitHub repo
