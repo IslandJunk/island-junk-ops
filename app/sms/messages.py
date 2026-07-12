@@ -59,6 +59,15 @@ def reminder(brand: Brand, *, what: str, name: str | None = None, when: str | No
     return f"{hi} a reminder from {brand_name(brand)}: {what}{when_txt}."
 
 
+def review_request(brand: Brand, *, link: str, name: str | None = None, crew: str | None = None) -> str:
+    """Follow-up review ask (§11 review tool). Sent after a completed job — the crew/office
+    asks the customer for a Google review. Brand named; the review link is passed in."""
+    hi = f"Hey {name}," if name else "Hey there,"
+    who = crew or "the crew"
+    return (f"{hi} {who} here from {brand_name(brand)} — hope you're happy with the work! "
+            f"A quick Google review really helps our local crew: {link} Thanks so much!")
+
+
 def residential_completion(brand: Brand, *, total, gst, etransfer_email: str,
                            name: str | None = None, subtotal=None, card_fee=None) -> str:
     """Residential completion text: price + GST + e-transfer email + "put your address in the

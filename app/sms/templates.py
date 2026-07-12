@@ -24,6 +24,12 @@ _KIND_TO_TEMPLATE = {
     "on_our_way": "enroute",
     "reminder": "reminder",
     "completion": "complete",
+    "review": "review",
+}
+# Default Google review link per brand (owner can override via owner-cfg `reviewLink`).
+_REVIEW_LINK = {
+    Brand.victoria: "https://g.page/r/IslandJunkVictoria/review",
+    Brand.nanaimo: "https://g.page/r/IslandJunkNanaimo/review",
 }
 
 
@@ -49,6 +55,8 @@ def _builtin(brand: Brand, kind: str, p: dict) -> str:
         return messages.residential_completion(
             brand, total=p["total"], gst=p["gst"], etransfer_email=p["etransfer_email"],
             name=p.get("name"), subtotal=p.get("subtotal"), card_fee=p.get("card_fee"))
+    if kind == "review":
+        return messages.review_request(brand, link=p.get("link") or "", name=p.get("name"), crew=p.get("crew"))
     raise ValueError(f"unknown message kind '{kind}'")
 
 
@@ -69,6 +77,7 @@ def _fill(tmpl: str, p: dict, profile: dict) -> str:
         "{etransfer}": (profile.get("etransfer") or p.get("etransfer_email") or ""),
         "{crew}": p.get("crew") or "the crew",
         "{eta}": p.get("eta") or "",
+        "{link}": p.get("link") or "",
     }
     out = tmpl
     for k, v in sub.items():
@@ -78,9 +87,12 @@ def _fill(tmpl: str, p: dict, profile: dict) -> str:
 
 def render(db: DbSession, brand: Brand, kind: str, params: dict) -> str:
     """The owner's edited template for this message (rendered), else the built-in default."""
+    params = dict(params)
+    cfg = _owner_cfg(db, brand)
+    if kind == "review" and not params.get("link"):   # link: owner-cfg override → brand default
+        params["link"] = cfg.get("reviewLink") or _REVIEW_LINK.get(brand) or ""
     okey = _KIND_TO_TEMPLATE.get(kind)
     if okey:
-        cfg = _owner_cfg(db, brand)
         tmpl = ((cfg.get("templates") or {}).get(okey) or "")
         if tmpl.strip():
             return _fill(tmpl, params, cfg.get("profile") or {})
