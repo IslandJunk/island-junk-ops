@@ -11,6 +11,7 @@ from app.models import (  # noqa: F401
     attendance,
     bin_field,
     bins,
+    card,
     clock,
     colour_map,
     contract,
