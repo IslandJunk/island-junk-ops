@@ -64,6 +64,40 @@ def find_brand_for_number(db: DbSession, number: str) -> Brand | None:
     return ctx["brand"] if ctx else None
 
 
+def _name_key(name: str | None) -> str:
+    """Normalise a customer name for matching: lowercase, non-alphanumerics stripped
+    (so 'Jade Smith' and 'jade  smith' collapse to the same key)."""
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def customer_phone_by_name(db: DbSession, brand: Brand, name: str | None) -> str | None:
+    """A customer's phone iff EXACTLY ONE customer (residential OR company) in this brand
+    matches `name` (normalised). Mirrors the review name→phone resolver
+    (sync_handlers._review_phone_index) so the residential completion text can reach the
+    customer without a phone field on the calculator. Ambiguous (>1 match) or absent → None,
+    and the caller falls back to a manually-entered number (the confirm-number step)."""
+    key = _name_key(name)
+    if not key:
+        return None
+    found: str | None = None
+    count = 0
+    for r in db.scalars(select(ResidentialCustomer).where(
+            ResidentialCustomer.brand == brand, ResidentialCustomer.phone.isnot(None))):
+        if _name_key(f"{r.first or ''} {r.last or ''}") == key:
+            count += 1
+            found = r.phone
+            if count > 1:
+                return None
+    for c in db.scalars(select(CompanyCustomer).where(
+            CompanyCustomer.brand == brand, CompanyCustomer.phone.isnot(None))):
+        if _name_key(c.co) == key:
+            count += 1
+            found = c.phone
+            if count > 1:
+                return None
+    return found if count == 1 else None
+
+
 def _fmt(e164: str) -> str:
     """+17789665865 -> 778-966-5865 for display in the reply."""
     d = re.sub(r"\D", "", e164 or "")

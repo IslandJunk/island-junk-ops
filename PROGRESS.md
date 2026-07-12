@@ -1,6 +1,14 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-12** — Went **live on Twilio** (Wes's creds in `.env`, Full account, updates line 778-906-5865): outbound texts
+**2026-07-12 (later)** — Wired the last two **deferred customer-facing SMS triggers** (§10, spec §2): the residential
+**completion text** (crew sends price + GST + e-transfer from the calc's e-Transfer modal, with a confirm-number input →
+unique customer-name fallback) and the **next-customer ETA** (crew marks a stop done on the day-board and texts the *next*
+stop their crew-entered arrival estimate — never raw map distance). Two new crew-accessible endpoints (`POST /sms/completion`,
+`POST /sms/eta`) compose server-side from the locked templates (brand-named, no card numbers); two additive bridges add the
+buttons to the approved screens. Verified end-to-end (resolver, both template paths, both endpoints, opt-out safety gate,
+no-phone/last-stop guards) with **zero real texts** (opt-out short-circuit). Alembic head unchanged (no new migration).
+
+**2026-07-12 (earlier)** — Went **live on Twilio** (Wes's creds in `.env`, Full account, updates line 778-906-5865): outbound texts
 **delivered end-to-end**. Built the **manager-reply nudge** (forwards a customer reply to the manager's phone *with* name +
 address — the "who's it from?" fix), made all **message wording owner-editable** in the Owner Hub, and shipped the full
 **follow-up-review send system** (real Victoria Google link, two-level dedup, manager board res + commercial, crew job-end
@@ -91,9 +99,13 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
   `twilio_validate_signatures=true` in `.env`.
 - **Square + Dropbox** — fully built (`app/integrations/square_pay.py`, `dropbox_files.py`), returning dry-run placeholders.
   What's left: add creds to `.env` (see §3) — no code.
-- **Deferred client SMS triggers** (endpoints ready, wiring pending a data/UX call): **residential completion** text (the
-  calc has no phone field — crew copies it today), **next-customer ETA** (needs the next stop's phone + a crew ETA-entry
-  step), **Dropbox photo filing** (no real photo source in the data model yet — §8 photos arrive at booking).
+- **Client SMS triggers — completion + next-ETA now WIRED** (`POST /sms/completion`, `POST /sms/eta`, both crew-accessible,
+  server-composed from the locked templates). Completion: the calc's e-Transfer modal gets a confirm-number input (blank →
+  unique customer-name match) + send button (`residential-calculator-bridge.js`). Next-ETA: the day-board job sheet gets a
+  "Text next stop your ETA" affordance under the on-our-way button — finds the next phoned stop in the same truck/day, takes
+  a crew-entered time, sends (`day-board-bridge.js`). **Still deferred:** the completion **photo attachment** (endpoint takes
+  `media_url` but no hosted photo URL exists yet) + **Dropbox photo filing** — both blocked on a real photo source (§8 photos
+  arrive at booking; needs Dropbox creds to host an MMS-able URL).
 - **Nanaimo review link** — `app/sms/templates.py::_REVIEW_LINK[Brand.nanaimo]` is `""`; set when Nanaimo is built.
 
 ---
@@ -107,8 +119,9 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
    `GET /square/status` = live and a payment-link creates a real Square URL.
 3. **Dropbox creds** → `.env`: `dropbox_access_token` (keep `dropbox_root=/Island Junk TEST` until go-live). Then decide the
    real **photo source** (§8: customer photos at booking) and wire the crew forms → `/dropbox/job-photo`.
-4. **Wire the deferred SMS triggers** (completion text + next-ETA) once the phone-flow decision is made (carry the booking
-   phone into the calc / day-board, or add a confirm-number step).
+4. ~~**Wire the deferred SMS triggers** (completion text + next-ETA)~~ — **DONE** (2026-07-12, phone-flow = confirm-number
+   step with a unique-name fallback). Remaining SMS work is the completion **photo attachment**, which waits on Dropbox (step 3)
+   to host an MMS-able URL for the job photo.
 5. **Nanaimo review link + workspace data** — set the Nanaimo Google review link; when starting Nanaimo, drive setup through
    the existing screens (brand-switch → rate-sheet "Copy Victoria", employees, bins, colour map, customer import) + stand up
    its calendar/Twilio/Dropbox/Square.

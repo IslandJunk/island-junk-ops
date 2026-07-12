@@ -92,6 +92,76 @@
     };
   }
 
+  // Next-customer ETA (SMS spec §2): the crew finishes a stop and texts the NEXT stop their
+  // estimated arrival (the crew's own estimate, never raw map distance). We inject the
+  // affordance into the job-detail sheet just under the "on our way" button. The next stop is
+  // the following stop in the SAME truck + day that still has a customer phone behind it.
+  function nextStopWithPhone(cur) {
+    if (!cur) return null;
+    var lane = (window.STOPS || []).filter(function (s) { return s.truck === cur.truck && s.day === cur.day; });
+    var i = -1;
+    for (var k = 0; k < lane.length; k++) { if (lane[k].id === cur.id) { i = k; break; } }
+    if (i < 0) return null;
+    for (var j = i + 1; j < lane.length; j++) { if (lane[j].phone) return lane[j]; }
+    return null;
+  }
+  function showEtaInput(wrap, nxt, nm) {
+    wrap.innerHTML = "";
+    var inp = document.createElement("input");
+    inp.id = "ijEtaTime"; inp.type = "text"; inp.placeholder = "ETA to " + nm + " — e.g. 2:45pm";
+    inp.autocomplete = "off";
+    inp.style.cssText = "width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #d8d3cc;border-radius:12px;font-size:15px;margin:4px 0";
+    var send = document.createElement("button");
+    send.className = "s-onway"; send.textContent = "Send ETA to " + nm;
+    send.onclick = function () {
+      var v = (inp.value || "").trim();
+      if (!v) { inp.focus(); return; }
+      send.disabled = true; send.textContent = "Sending…";
+      fetch("/sms/eta", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: nxt.phone, name: nm, eta: v }),
+      }).then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
+        if (res && res.sent) { done(wrap, "✓ ETA sent to " + nm); }
+        else if (res && res.dry_run) { done(wrap, "✓ ETA composed (texting not live yet)"); }
+        else if (res && res.skipped === "opted_out") { send.disabled = false; send.textContent = nm + " opted out of texts"; }
+        else { send.disabled = false; send.textContent = "Couldn't send — try again"; }
+      }).catch(function () { send.disabled = false; send.textContent = "Couldn't reach the server"; });
+    };
+    wrap.appendChild(inp); wrap.appendChild(send); inp.focus();
+  }
+  function done(wrap, msg) {
+    wrap.innerHTML = "";
+    var d = document.createElement("div");
+    d.className = "s-onway sent"; d.textContent = msg;
+    wrap.appendChild(d);
+  }
+  function injectEta() {
+    var cur = (typeof CURRENT !== "undefined") ? CURRENT : null;
+    var ow = document.getElementById("owBtn");
+    if (!cur || !ow || document.getElementById("ijEtaWrap")) return;
+    var nxt = nextStopWithPhone(cur);
+    if (!nxt) return;   // last stop, or the next has no number — nothing to offer
+    var nm = ((nxt.cust || "the next customer").split(" ")[0]) || "the next customer";
+    var wrap = document.createElement("div");
+    wrap.id = "ijEtaWrap";
+    var btn = document.createElement("button");
+    btn.className = "s-onway"; btn.id = "ijEtaBtn";
+    btn.textContent = "📍 Text next stop (" + nm + ") your ETA";
+    btn.onclick = function () { showEtaInput(wrap, nxt, nm); };
+    wrap.appendChild(btn);
+    ow.parentNode.insertBefore(wrap, ow.nextSibling);
+  }
+  function wireNextEta() {
+    if (typeof openStop !== "function") return;
+    var _open = openStop;
+    window.openStop = function () {
+      var r = _open.apply(this, arguments);
+      try { injectEta(); } catch (e) {}
+      return r;
+    };
+  }
+
   function start() {
     // Re-fetch a day whenever the manager switches the day tab.
     if (typeof setDay === "function") {
@@ -99,6 +169,7 @@
       window.setDay = function (i) { _sd(i); loadDay(i).then(function () { rebuild(); render(); }); };
     }
     wireOnOurWay();
+    wireNextEta();
     refresh();  // no-op board if not logged in yet; call __ijDayRefresh() after login
   }
   if (document.readyState !== "loading") start();

@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.models.employee import Employee
 from app.models.enums import Brand
 from app.models.sms import SmsMessage, SmsOptOut
-from app.sms import service, templates
+from app.sms import routing, service, templates
 
 router = APIRouter(prefix="/sms", tags=["sms"])
 
@@ -73,6 +73,69 @@ def send(body: SendIn, request: Request, db: DbSession = Depends(get_db),
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Bad message params: {e}")
     res = service.send(db, brand=brand, to=body.to, body=text, kind=body.kind, media_url=body.media_url)
     return {"to": body.to, "brand": brand.value, "kind": body.kind, "body": text, **res}
+
+
+class CompletionIn(BaseModel):
+    """Residential completion — the crew's numbers off the calculator. Phone is optional:
+    explicit (a confirm-number step in the calc), else resolved from a unique customer-name
+    match server-side."""
+    name: str | None = None
+    phone: str | None = None
+    total: float
+    gst: float
+    subtotal: float | None = None
+    card_fee: float | None = None
+    etransfer_email: str
+    media_url: str | None = None    # the job photo, once a hosted URL exists (Dropbox)
+
+
+@router.post("/completion")
+def completion(body: CompletionIn, request: Request, db: DbSession = Depends(get_db),
+               emp: Employee = Depends(get_current_employee)) -> dict:
+    """Residential completion text — price + GST + e-transfer (spec §2), sent by the crew on
+    site from the updates line. Any signed-in employee (like the review send). The phone is
+    explicit (confirm-number) → a unique customer-name match; if neither resolves, we return
+    `no_phone` and the calc falls back to its own 'Open in Messages'. Composed server-side
+    from the locked template (brand-named, never a card number). Dry-run until Twilio creds."""
+    brand = active_brand_for(request, emp)
+    to = (body.phone or "").strip() or routing.customer_phone_by_name(db, brand, body.name)
+    if not to:
+        return {"sent": False, "reason": "no_phone", "name": body.name}
+    params = {
+        "name": body.name, "total": body.total, "gst": body.gst,
+        "subtotal": body.subtotal, "card_fee": body.card_fee,
+        "etransfer_email": body.etransfer_email,
+    }
+    try:
+        text = templates.render(db, brand, "completion", params)   # owner's wording, else built-in
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Bad message params: {e}")
+    res = service.send(db, brand=brand, to=to, body=text, kind="completion", media_url=body.media_url)
+    return {"to": to, "brand": brand.value, "kind": "completion", "body": text, **res}
+
+
+class EtaIn(BaseModel):
+    to: str            # the NEXT stop's customer phone (from the day-board's linked Job)
+    eta: str           # the crew's arrival estimate — NEVER raw map distance (spec §2)
+    name: str | None = None
+
+
+@router.post("/eta")
+def eta(body: EtaIn, request: Request, db: DbSession = Depends(get_db),
+        emp: Employee = Depends(get_current_employee)) -> dict:
+    """Next-customer ETA (spec §2): the crew finishes a stop and enters the estimated arrival
+    for the NEXT stop; that customer gets it. Any signed-in employee. The estimate is the
+    crew's own — the app never derives it from a map. Composed server-side, brand-named.
+    Dry-run until Twilio creds."""
+    to = (body.to or "").strip()
+    if not to:
+        return {"sent": False, "reason": "no_phone"}
+    if not (body.eta or "").strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "eta required")
+    brand = active_brand_for(request, emp)
+    text = templates.render(db, brand, "eta", {"eta": body.eta.strip(), "name": body.name})
+    res = service.send(db, brand=brand, to=to, body=text, kind="eta")
+    return {"to": to, "brand": brand.value, "kind": "eta", "body": text, **res}
 
 
 @router.get("/status")
