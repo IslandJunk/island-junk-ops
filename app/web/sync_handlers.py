@@ -715,6 +715,24 @@ def apply_binsout_cfg(db: DbSession, brand: Brand, data, actor: Employee) -> dic
     return _apply_setting(db, brand, "ij_binsout_cfg_v1", data)
 
 
+def apply_owner_cfg(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
+    """`ij_owner_cfg_v1` — the owner-hub's per-brand config (profile, message templates, tax,
+    apps, msgOn). Owner-only. The doc holds BOTH brands (`{victoria:{...}, nanaimo:{...}}`);
+    store each brand's slice under its own `brand_setting` so the SMS sender can read the
+    owner's edited templates + e-transfer email per brand."""
+    if not is_owner(actor):
+        return {"error": "forbidden — owner only"}
+    if not isinstance(data, dict):
+        return {"saved": False}
+    n = 0
+    for b in (Brand.victoria, Brand.nanaimo):
+        slice_ = data.get(b.value)
+        if isinstance(slice_, dict):
+            _apply_setting(db, b, "ij_owner_cfg_v1", slice_)
+            n += 1
+    return {"saved": True, "brands": n}
+
+
 def apply_checklists(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """`ij_checklists_v1` — the owner/manager-configurable crew checklist TEMPLATES
     (walk-around + clock-out, per crew type). `{walk:{hand,bin}, clockout:{hand,bin,yard}}`,
@@ -1341,6 +1359,7 @@ HANDLERS = {
     "ij_daynotes_v1": apply_daynotes,
     "ij_binsout_cfg_v1": apply_binsout_cfg,
     "ij_checklists_v1": apply_checklists,
+    "ij_owner_cfg_v1": apply_owner_cfg,
     "ij_reviews_v1": apply_reviews,
     "ij_usage_v1": apply_usage,
     "ij_precheck_v1": apply_precheck,

@@ -445,6 +445,19 @@ def build_binsout_cfg_v1(db: DbSession, brand: Brand) -> dict | None:
     return row.value if (row and isinstance(row.value, dict)) else None
 
 
+def build_owner_cfg_v1(db: DbSession, brand: Brand) -> dict | None:
+    """`ij_owner_cfg_v1` — the owner's per-brand config, reassembled to `{victoria, nanaimo}`
+    (the owner-hub switches between both, so we return both regardless of the active brand).
+    None until the owner has saved config for a brand (keeps the prototype's seed meanwhile)."""
+    out: dict = {}
+    for b in (Brand.victoria, Brand.nanaimo):
+        row = db.scalar(select(BrandSetting).where(
+            BrandSetting.brand == b, BrandSetting.key == "ij_owner_cfg_v1"))
+        if row and isinstance(row.value, dict):
+            out[b.value] = row.value
+    return out or None
+
+
 def build_checklists_v1(db: DbSession, brand: Brand) -> dict | None:
     """`ij_checklists_v1` — the owner's crew checklist templates. None until the owner has
     saved them (the crew tools keep their own built-in defaults meanwhile)."""
@@ -506,6 +519,7 @@ _BUILDERS = {
     "ij_daynotes_v1": build_daynotes_v1,
     "ij_binsout_cfg_v1": build_binsout_cfg_v1,
     "ij_checklists_v1": build_checklists_v1,
+    "ij_owner_cfg_v1": build_owner_cfg_v1,
     "ij_reviews_v1": build_reviews_v1,
     "ij_usage_v1": build_usage_v1,
     "ij_po_needed_v1": build_po_needed_v1,

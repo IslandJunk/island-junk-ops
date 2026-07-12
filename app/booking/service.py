@@ -61,10 +61,11 @@ def _send_booking_confirmation(db: DbSession, job: Job, on_date: date) -> None:
     if not job.customer_phone:
         return
     try:
-        from app.sms import messages as sms_messages, service as sms_service
-        body = sms_messages.booking_confirmation(
-            job.brand, name=job.customer_name,
-            when=_confirm_when(on_date, job.time_start, job.time_end), address=job.address)
+        from app.sms import service as sms_service, templates as sms_templates
+        body = sms_templates.render(db, job.brand, "booking_confirm", {
+            "name": job.customer_name,
+            "when": _confirm_when(on_date, job.time_start, job.time_end),
+            "address": job.address})
         sms_service.send(db, brand=job.brand, to=job.customer_phone, body=body, kind="booking_confirm")
     except Exception:
         pass

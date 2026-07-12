@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # the numbers the reply auto-router points recognised customers back to.
     victoria_main_line: str = "+17789665865"           # 778-966-5865
     nanaimo_main_line: str = "+17789775865"            # 778-977-5865
+    # Where the app FORWARDS an inbound customer reply (with who-it-is + job context) so the
+    # manager isn't left guessing. Defaults to the brand's main line (the manager's phone);
+    # override in .env to send nudges to a different phone/number. Set blank to disable.
+    manager_notify_victoria: str | None = None
+    manager_notify_nanaimo: str | None = None
     # Verify inbound Twilio webhook signatures when set (the request URL's public base).
     twilio_validate_signatures: bool = False
 

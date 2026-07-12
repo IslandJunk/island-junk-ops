@@ -15,7 +15,8 @@
     ij_dayboard_status_v1: 1, ij_dayboard_notes_v1: 1, ij_dayboard_sitelog_v1: 1,
     ij_attendance_v1: 1, ij_breaks_v1: 1, ij_daynotes_v1: 1, ij_binsout_cfg_v1: 1,
     ij_reviews_v1: 1, ij_usage_v1: 1, ij_precheck_v1: 1,
-    ij_fleet_v1: 1, ij_colourmap_v1: 1, ij_checklists_v1: 1, ij_po_needed_v1: 1
+    ij_fleet_v1: 1, ij_colourmap_v1: 1, ij_checklists_v1: 1, ij_po_needed_v1: 1,
+    ij_owner_cfg_v1: 1
   };
   var timers = {};
   var orig = localStorage.setItem.bind(localStorage);

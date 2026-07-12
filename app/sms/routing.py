@@ -41,19 +41,27 @@ def digits10(s: str | None) -> str:
     return d[-10:] if len(d) >= 10 else d
 
 
-def find_brand_for_number(db: DbSession, number: str) -> Brand | None:
-    """Which brand's customer is this? Match the inbound number against residential + company
-    customer phones by last-10-digits. Returns None if unrecognised (spec §3 → list both)."""
+def find_customer_context(db: DbSession, number: str) -> dict | None:
+    """Who texted us? Match the inbound number against residential + company customer phones
+    by last-10-digits → {name, address, brand}. This is what lets the manager nudge say WHO
+    it's from (spec §3.3). None if unrecognised."""
     want = digits10(number)
     if not want:
         return None
     for r in db.scalars(select(ResidentialCustomer).where(ResidentialCustomer.phone.isnot(None))):
         if digits10(r.phone) == want:
-            return r.brand
+            name = f"{r.first or ''} {r.last or ''}".strip()
+            return {"name": name or None, "address": r.addr, "brand": r.brand}
     for c in db.scalars(select(CompanyCustomer).where(CompanyCustomer.phone.isnot(None))):
         if digits10(c.phone) == want:
-            return c.brand
+            return {"name": c.co, "address": c.addr, "brand": c.brand}
     return None
+
+
+def find_brand_for_number(db: DbSession, number: str) -> Brand | None:
+    """Just the brand of a recognised customer (spec §3 → None → list both main lines)."""
+    ctx = find_customer_context(db, number)
+    return ctx["brand"] if ctx else None
 
 
 def _fmt(e164: str) -> str:

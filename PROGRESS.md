@@ -136,6 +136,21 @@ absent creds → **dry-run** (composes + logs, never sends), activates when Wes 
 - **Endpoints:** `POST /sms/inbound` (Twilio webhook → TwiML, optional signature validation), `POST /sms/send`
   (owner/manager; composes server-side by `kind` so the brand/no-card rules can't be bypassed), `GET /sms/status`,
   `GET /sms/log`. Verified end-to-end in dry-run (webhook TwiML, opt-out/opt-in, dry-run compose+log).
+- **LIVE (2026-07-12):** Wes's Twilio creds in `.env` (Full account, updates line `+17789065865`, SMS+MMS). Outbound
+  **delivered end-to-end** (real test text + the manager nudge both confirmed `delivered` by Twilio). Inbound still needs
+  the public deploy + webhook.
+- **Manager nudge (§3.3 — the "who's it from?" fix):** an inbound customer reply is forwarded to the manager's phone WITH
+  context — `📱 Island Junk Solutions — reply from Jane Ratepayer (…) · 12 Oak St: "I'm not home yet…"` — because the app
+  recognises the sender (`routing.find_customer_context` → name/address/brand). Target = per-brand `manager_notify_*`
+  (`.env`) else the brand's main line. Sent from the updates line (the from-guard still forbids the main lines). Verified
+  delivered to Wes's cell.
+- **Owner-editable message wording:** `ij_owner_cfg_v1` (the owner-hub's per-brand config — profile + `templates`
+  {confirm→booking_confirm, enroute→on_our_way, reminder, complete→completion} + apps/tax/msgOn) now **persists** —
+  `apply_owner_cfg` splits the `{victoria,nanaimo}` doc into per-brand `brand_setting` rows (owner-only); `build_owner_cfg_v1`
+  reassembles both. `app/sms/templates.py::render` uses the owner's edited template (placeholders {name}/{date}/{total}/
+  {address}/{etransfer}/…) if set, else the built-in — so **"change the texts" = edit them in the Owner Hub**. All sends go
+  through `render` (`/sms/send` + the booking hook). Verified: a saved custom template flowed to the sender; un-edited →
+  built-in. Injected on owner-hub + residential-calc + commercial-form + manager-hub.
 
 **Square + Dropbox integrations — BUILT (dry-run until creds)** — same creds-gated pattern, no new tables (stateless
 wrappers via `httpx`):

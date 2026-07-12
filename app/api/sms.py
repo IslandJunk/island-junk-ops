@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.models.employee import Employee
 from app.models.enums import Brand
 from app.models.sms import SmsMessage, SmsOptOut
-from app.sms import messages, service
+from app.sms import service, templates
 
 router = APIRouter(prefix="/sms", tags=["sms"])
 
@@ -52,24 +52,6 @@ async def inbound(request: Request, db: DbSession = Depends(get_db)) -> Response
     return _twiml(result["reply"])
 
 
-# Server-side composition per message kind (spec §2) — the client passes facts, never the
-# raw text, so brand-naming + "no card numbers" are enforced here.
-def _compose(kind: str, brand: Brand, p: dict) -> str:
-    if kind == "booking_confirm":
-        return messages.booking_confirmation(brand, name=p.get("name"), when=p.get("when"), address=p.get("address"))
-    if kind == "on_our_way":
-        return messages.on_our_way(brand, name=p.get("name"), eta=p.get("eta"))
-    if kind == "eta":
-        return messages.next_customer_eta(brand, eta=p["eta"], name=p.get("name"))
-    if kind == "reminder":
-        return messages.reminder(brand, what=p["what"], name=p.get("name"), when=p.get("when"))
-    if kind == "completion":
-        return messages.residential_completion(
-            brand, total=p["total"], gst=p["gst"], etransfer_email=p["etransfer_email"],
-            name=p.get("name"), subtotal=p.get("subtotal"), card_fee=p.get("card_fee"))
-    raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unknown message kind '{kind}'")
-
-
 class SendIn(BaseModel):
     to: str
     kind: str
@@ -85,7 +67,10 @@ def send(body: SendIn, request: Request, db: DbSession = Depends(get_db),
     if not (is_owner(emp) or "manager" in (emp.access or [])):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Manager/owner only")
     brand = active_brand_for(request, emp)
-    text = _compose(body.kind, brand, body.params)
+    try:
+        text = templates.render(db, brand, body.kind, body.params)   # owner's wording, else built-in
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Bad message params: {e}")
     res = service.send(db, brand=brand, to=body.to, body=text, kind=body.kind, media_url=body.media_url)
     return {"to": body.to, "brand": brand.value, "kind": body.kind, "body": text, **res}
 
