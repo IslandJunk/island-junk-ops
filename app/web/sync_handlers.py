@@ -587,19 +587,44 @@ def _overlay_upsert(db: DbSession, brand: Brand, event_id: str, col: str, value)
     db.execute(stmt)
 
 
+def _paint_completed_job(db: DbSession, brand: Brand, event_id: str) -> int:
+    """WS2 trigger: when a stop is marked done, set the linked Job's crew-completion status and
+    auto-paint its calendar event — bins -> awaiting_payment (Tomato/red, "returned"), hands-on
+    -> done (Basil/green). Transition-only (skips if already at that status) so a re-sync doesn't
+    re-hit Google. Best-effort — a paint failure never blocks the crew's status save."""
+    from app.dispatch.paint import paint_job_status
+    from app.models.enums import BookingLane, JobStatus
+    from app.models.job import Job
+    job = db.scalar(select(Job).where(Job.brand == brand, Job.gcal_event_id == event_id))
+    if job is None:
+        return 0
+    target = JobStatus.awaiting_payment if job.booking_lane == BookingLane.bins else JobStatus.done
+    if job.status == target:
+        return 0
+    job.status = target
+    db.flush()
+    try:
+        return 1 if paint_job_status(db, job).get("painted") else 0
+    except Exception:
+        return 0
+
+
 def apply_dayboard_status(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
-    """`ij_dayboard_status_v1` = {event_id: status} — crew status override per stop.
-    Grow-only (the prototype never clears a status)."""
+    """`ij_dayboard_status_v1` = {event_id: status} — crew status override per stop. Grow-only
+    (the prototype never clears a status). When a stop is marked `done`, WS2 auto-paints the
+    linked Job's calendar event its status colour (bins red, hands-on green)."""
     if not isinstance(data, dict):
         return {"upserted": 0}
-    n = 0
+    n = painted = 0
     for eid, st in data.items():
         if not eid:
             continue
         _overlay_upsert(db, brand, str(eid), "status", st or None)
         n += 1
+        if str(st or "").lower() == "done":
+            painted += _paint_completed_job(db, brand, str(eid))
     db.commit()
-    return {"upserted": n}
+    return {"upserted": n, "painted": painted}
 
 
 def apply_dayboard_notes(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
