@@ -161,6 +161,22 @@ wrappers via `httpx`):
   photo (data-URL from the crew form) into a **per-job folder under the configured TEST root**; every upload asserts the
   path is inside `dropbox_root` (guard verified to refuse an outside path, §2/§4). Dry-run uploads nothing.
 
+**Follow-up reviews — full send system (§11, Wes 2026-07-12)** — reviews can now be SENT (they only tracked before),
+streamlined per Wes's spec, migration `cdecca6a35e4` (phone/account/sent_at/sent_to on `followup_review`):
+- **Engine** (`app/reviews/service.py` + `app/api/reviews.py`): `POST /reviews/send` composes the review ask (owner
+  `review` template + Wes's REAL Victoria Google link `g.page/r/CYpCB7lEXE6yEAE/review`), sends from the updates line, and
+  **dedups two ways so no customer is asked twice** — (1) this record already sent, (2) this phone got a review within 60
+  days (customer-level). `GET /reviews` = the board (pending vs sent, residential + commercial). Verified live: sent +
+  delivered, both dedup gates block a re-send.
+- **Phone resolution:** explicit → the record → a **unique exact name match** in the customer list (`apply_reviews`
+  enriches; ambiguous names never auto-resolve, so we can't text the wrong person).
+- **Manager board** (`manager-hub-bridge.js`): the follow-up-reviews board's "Send review" button now really sends (was
+  mark-only) — handles sent / already-asked / no-phone. **Commercial included:** a completed commercial `field_job` spawns
+  a review record (`apply_field_jobs`), phone resolved by company name.
+- **Crew at job-end** (`residential-calculator-bridge.js`): the paid-on-site review modal gets a "Send review from the
+  Island Junk line" button (tracked + deduped) beside the crew's own "Open in Messages". All bridges additive/best-effort.
+- **Nanaimo review link** still TBD (set when Nanaimo goes live).
+
 **Punch-time calendar mirror — LIVE** (migration `a5abfdbdebfc` adds `clock_punch.gcal_event_id`) — Wes shared the
 "PUNCH TIME - TEST" calendar (`c_1033bcf8…`) with the service account (writer). `apply_clock` now mirrors each punch to
 it best-effort: **one event per person per day**, updated in place clock-in → clock-out (a timed shift block

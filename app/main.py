@@ -88,7 +88,7 @@ SCREENS: dict[str, dict] = {
     "new-booking":     {"file": "island-junk-new-booking-v67.html", "keys": _DISPATCH_REFS + _CUSTOMER_REFS + ["ij_rates_v1", "ij_po_needed_v1"], "bridge": "booking-bridge.js"},
     "day-board":       {"file": "island-junk-day-board-v28.html",   "keys": _DISPATCH_REFS + _DAYBOARD_REFS + ["ij_checklists_v1"], "bridge": "day-board-bridge.js"},
     "bin-registry":    {"file": "island-junk-bin-registry-v6.html", "keys": ["ij_bins_v1", "ij_binsout_cfg_v1"], "bridge": None},
-    "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1", "ij_reviews_v1", "ij_usage_v1", "ij_owner_cfg_v1"], "bridge": None},
+    "residential-calculator": {"file": "CREW-residential-calculator-v25.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1", "ij_reviews_v1", "ij_usage_v1", "ij_owner_cfg_v1"], "bridge": "residential-calculator-bridge.js"},
     "commercial-form": {"file": "CREW-commercial-form-v22.html", "keys": ["ij_rates_v1", "ij_employees_v1", "ij_jobs_v1", "ij_usage_v1", "ij_owner_cfg_v1"], "bridge": None},
     "owner-hub":       {"file": "island-junk-owner-hub-v54.html",   "keys": _HUB_REFS + _HR_REFS + ["ij_usage_v1", "ij_checklists_v1", "ij_po_needed_v1", "ij_po_seeded_v1", "ij_owner_cfg_v1"], "bridge": "owner-hub-bridge.js"},
     "manager-hub":     {"file": "island-junk-management-hub-v83.html", "keys": _HUB_REFS + _HR_REFS + ["ij_reviews_v1", "ij_usage_v1", "ij_po_needed_v1", "ij_owner_cfg_v1"], "bridge": "manager-hub-bridge.js"},
