@@ -140,6 +140,15 @@ def delete_event(event_id: str) -> None:
     _svc().events().delete(calendarId=cal, eventId=event_id).execute()
 
 
+def recolor_event(event_id: str, color_id: str | int) -> None:
+    """WS2 auto-paint: recolour a dispatch event to a lifecycle STATUS colour when the crew
+    completes it. Writes ONLY to the configured TEST calendar (the dispatch calendar during the
+    build; the go-live crew calendar later) — `_assert_test_calendar` hard-refuses the two live
+    dispatch calendars + primary, so this can NEVER paint a live calendar (CLAUDE.md §2)."""
+    cal = _assert_test_calendar(settings.google_test_calendar_id)
+    _svc().events().patch(calendarId=cal, eventId=event_id, body={"colorId": str(color_id)}).execute()
+
+
 # ── CC-charge reminder calendar (off-board; §9/§11) ────────────────────────────
 
 def reminder_calendar_accessible() -> bool:
