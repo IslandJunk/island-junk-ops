@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     square_access_token: str | None = None
     square_location_id: str | None = None
     square_environment: str = "sandbox"      # "sandbox" | "production"
+    # Public Web Payments SDK application id (WS3 card-on-file capture at bin booking). Not a
+    # secret; the SDK card field needs it + the location id. Sandbox id for the build.
+    square_application_id: str | None = None
 
     # ── Dropbox (auto-file job photos; TEST folder first, §4/§10) ─────────────
     dropbox_access_token: str | None = None      # or a refresh-token flow later
