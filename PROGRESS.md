@@ -31,10 +31,21 @@ rejected (auth expiry) in favour of card-on-file. **Shipped + verified:**
 (`SQUARE_ENVIRONMENT=sandbox`, app id `sandbox-sq0idb-…`, location `L57750E6QHVHF` "Default Test Account" CAD).
 **Render still has PRODUCTION Square** (untouched). Test nonce `cnon:card-nonce-ok`.
 
-**Still to build:** WS3 **frontend** — the Web Payments SDK card field at bin booking + the "Charge card on
-file" button on the owner queue (both want Wes live with a Square test card). WS1 — two-event link +
-`BIN-xxxx` reference code. **WS4 QuickBooks** — needs Wes's QB **sandbox + developer app** (dev.intuit.com;
-redirect URIs `.../quickbooks/callback`). Migration head now **`28c686247d41`**. Make.com stays off.
+**Still to build (in order):**
+1. **WS4 — QuickBooks (read-only sync)**: detect **invoice-sent** → start the 48h clock + reminder; detect
+   **payment** → clear the reminder + mark paid. **Owner-Hub on/off toggle + manual fallback** (the manual
+   buttons already work, so QB is a layer on top). Needs Wes's QB **developer app + sandbox company**
+   (dev.intuit.com; redirect URIs `http://localhost:8000/quickbooks/callback` +
+   `https://island-junk-ops.onrender.com/quickbooks/callback`). Match a QB invoice to a bin job by the
+   **`BIN-xxxx` reference code** Wes pastes into the invoice PO field.
+2. **WS1 — two-event bin link + `BIN-xxxx` reference code** (do this WITH WS4 — it's the QB match key).
+3. **Follow-ons (small):** embed the `/app/save-card` field into the bin-booking bin lane (standalone today);
+   auto-paint from the **bin-tracker** drop/pickup + the **residential calculator** (payment-aware green/red).
+
+Migration head **`28c686247d41`**. Make.com stays off. **OPEN QUESTION for next session:** Wes's screenshot
+showed a *"QuickBooks Connections · Victoria ✓ Connected (production)"* page — that is **NOT** built in
+island-junk-ops (WS4 isn't started). Ask Wes what that page is (another app? a QB dev app he already made?)
+before building WS4 — he may already have the QB developer app/sandbox we need.
 
 **2026-07-12 (LIVE on Render)** — **Deployed to production.** App is live at
 **`https://island-junk-ops.onrender.com`** (Blueprint `render.yaml`, Starter plan, Python 3.13, GitHub repo
@@ -159,6 +170,9 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
 ---
 
 ## 3. NEXT (in order)
+
+> **Priority now = the bin-payments/calendar build at the TOP of this file (WS4 QuickBooks next).** The
+> items below are the *separate, still-open v1 integrations* (Dropbox, Nanaimo) — do them when they come up.
 
 1. ~~**Deploy to Render**~~ — **DONE** (2026-07-12). Live at `https://island-junk-ops.onrender.com`; Twilio inbound +
    manager nudge on and secured. See the top-of-file entry + `DEPLOY.md`. Env/secrets are set in the Render dashboard.
