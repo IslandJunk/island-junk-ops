@@ -38,12 +38,18 @@ def cc_charge_source_id(*, job_id: uuid.UUID | None, name: str | None,
 def add_cc_charge_reminder(db: DbSession, brand: Brand, *, invoice_date: date,
                            job_id: uuid.UUID | None = None, name: str | None = None,
                            addr: str | None = None, by: str = "app",
+                           reference_code: str | None = None,
                            commit: bool = False) -> Reminder:
     """Create the CC-charge reminder when a residential-bin invoice is sent (idempotent).
-    `due = invoice_date + 2 working days`."""
+    `due = invoice_date + 2 working days`. `reference_code` = the BIN-xxxx QB match key so WS4
+    (and the owner, in QuickBooks) can tie the invoice/payment back to this reminder."""
     sid = cc_charge_source_id(job_id=job_id, name=name, addr=addr, invoice_date=invoice_date)
     existing = db.scalar(select(Reminder).where(Reminder.brand == brand, Reminder.source_id == sid))
     if existing is not None:
+        if reference_code and not existing.reference_code:
+            existing.reference_code = reference_code   # backfill the code onto a prior reminder
+            if commit:
+                db.commit()
         return existing
     due = add_business_days(invoice_date, CC_CHARGE_WORKING_DAYS)
     who = name or "customer"
@@ -51,7 +57,8 @@ def add_cc_charge_reminder(db: DbSession, brand: Brand, *, invoice_date: date,
             f"Invoiced {invoice_date.isoformat()}; e-transfer due by {due.isoformat()} "
             f"(2 working days); else charge card on file +2.4% (manual).")
     r = Reminder(brand=brand, source_id=sid, kind=ReminderKind.cc_charge, text=text, by=by,
-                 due=due, name=name, addr=addr, job_id=job_id, calendar=CC_CHARGE_CALENDAR)
+                 due=due, name=name, addr=addr, job_id=job_id, reference_code=reference_code,
+                 calendar=CC_CHARGE_CALENDAR)
     db.add(r)
     _mirror_to_calendar(r, due, who, text)   # best-effort; DB reminder saves regardless
     if commit:

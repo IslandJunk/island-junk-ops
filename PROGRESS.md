@@ -1,5 +1,50 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-12 (WS4 security review DONE + auto-poll shipped)** — Full WS4 built, sandbox-proven end-to-end, and reviewed.
+- **Security review** of `app/api/quickbooks.py`, `app/quickbooks/*`, `app/integrations/qbo.py`. **Fixed:** (1) reflected XSS —
+  the `/quickbooks/callback` page echoed the Intuit `?error` param (+ company name + exception) into HTML unescaped, and the
+  error branch runs *before* any signature check → now `html.escape`d; (2) bounded the invoice matcher to `BIN-\d{1,15}` so an
+  over-long code can't overflow `varchar(20)` and 500 the sync batch (same class as the `source_id` bug); (3) numeric-`realmId`
+  guard in the callback + `max_length=20` on the manual cc-charge input. **Verified clean:** read-only by construction (QBO
+  client only GETs + token grants — no POST to any invoice/payment), owner-only on every `/quickbooks/*` route, signed +
+  time-boxed CSRF state bound to the owner, no auto-charge path, calendar live-ID guard intact, no injection, secrets git-ignored.
+  **Open recommendation before a REAL company (Wes's call):** OAuth access+refresh tokens sit plaintext in `qbo_connection` —
+  recommend Fernet encryption at rest (~15 min). Minor: sync reads ≤1000 changed invoices/run (add paging if exceeded).
+- **Auto-poll shipped** — `app/quickbooks/poll.py::poll_all` + `scripts/qbo_poll.py` + a `render.yaml` `*/15` cron; no-op unless a
+  brand's auto-sync toggle is ON; tested locally (Victoria toggled on → synced → restored to OFF). Activates on the next deploy.
+- **Left before real QB:** deploy to Render (commit + push; set production Intuit keys + point `QBO_REDIRECT_URI` at the
+  onrender callback; connect the real company) and, recommended, the token encryption above. Live preview: `preview_start` (`api`).
+
+**2026-07-12 (WS4 QuickBooks — Connect LIVE + BIN-xxxx DONE)** — Building WS4 (live read-only QB sync).
+**Shipped + verified this session:**
+- **QBO OAuth Connect** — `app/integrations/qbo.py` (authorize / callback / refresh / read-only query + companyinfo),
+  `QboConnection` token table (migration `bb14991c2fcc`), owner-only `/quickbooks/connect|callback|status|disconnect|sync-toggle`
+  (`app/api/quickbooks.py`), Owner-Hub **QuickBooks** card (`owner-hub-bridge.js`). CSRF `state` signed to the owner emp id +
+  time-boxed; `ij_session` cookie is SameSite=Lax so it survives the Intuit round-trip. **Wes connected the QB SANDBOX live**
+  (company "Sandbox Company US 0ab4", realm 9341457448289097) — proves the token AND a read-only companyinfo GET. Sandbox
+  creds in the local `.env` (`QBO_CLIENT_ID/SECRET`, `QBO_ENVIRONMENT=sandbox`,
+  `QBO_REDIRECT_URI=http://localhost:8000/quickbooks/callback`; use `localhost`, not 127.0.0.1). Auto-sync default OFF (manual-first).
+- **BIN-xxxx reference code (migration `1c7ca647e84a`)** — anchored to the **bin's out-period** (Wes's steer: the app already
+  tracks which bins are out and the pickup picks from that list, so bin code = the drop↔pickup link — no booking-flow rebuild).
+  `apply_bins` mints `reference_code` (`BIN-####` from the `bin_ref_seq` sequence) + `rental_group_id` when a bin goes OUT
+  (dropped/full from a non-out state); stable through the rental, re-mints on a fresh drop; safety-mints legacy out-bins.
+  Surfaced in the invoice-queue and carried onto the cc_charge `Reminder` (the WS4 match key); Owner-Hub Ready-to-invoice +
+  Bins-awaiting-payment show **"QuickBooks PO: BIN-#### [Copy]"**. Backfilled current out-bins. Verified end-to-end
+  (mint/keep/re-mint, reminder stores it, refChip renders, live test bin snapshotted + restored). Migration head now **`1c7ca647e84a`**.
+- **WS4 read-only sync engine — DONE + proven against the live sandbox.** `app/quickbooks/sync.py::sync_brand`: refreshes the
+  token, queries QBO invoices changed since `last_synced_at` (`MetaData.LastUpdatedTime`, 90-day first-run lookback), extracts
+  `BIN-####` from memo / PO / DocNumber / custom-field / line, and — matching a cc_charge `Reminder` by `reference_code` (so the
+  manual + QB paths never double-create) — starts the 48h clock on an unpaid invoice and clears it + marks paid when
+  `Balance == 0`. READ-ONLY: no POST to any QBO invoice/payment. Owner-only `POST /quickbooks/sync` + a **"Sync QuickBooks now"**
+  button in the Owner-Hub QB sheet. Live sandbox run scanned **31 invoices, 0 matched** (QBO sample data) with token refresh, no
+  errors. **Sandbox loop PROVEN end-to-end** (2026-07-12) — invoice #1038 with `BIN-4021`: Sync started the 48h clock → payment
+  received → Sync marked it paid + cleared the queue (reminder `by=quickbooks`, `done=True`). The test surfaced + fixed a real
+  bug: `Reminder.source_id` was `varchar(60)` and a QB customer name + full billing address overflowed it → widened to 500
+  (**migration `7ee94fa5e7d8`**, new head; also fixes the latent manual-flow case). **Remaining before real QB:** (a) **security
+  review** of the WS4 surface (tokens at rest, read-only enforcement, charge + calendar guards); (b) **deploy to Render** + set
+  production Intuit keys + connect the real QB company; (c) optional **scheduled auto-poll** (Render cron) so the toggle polls
+  without a manual "Sync now". Local preview runs via `preview_start` (name `api`, `localhost:8000`); QBO code is uncommitted on `main`.
+
 **2026-07-12 (bin payments + calendar build IN PROGRESS)** — Wes approved a **4-workstream build** (spec:
 `docs/bin-payments-and-calendar-plan.md`) that reverses three guardrails *deliberately* (auto-paint status
 colours on the app's own calendar — never live; owner-pressed card charging via Square tokens; live

@@ -64,6 +64,22 @@ class Settings(BaseSettings):
     # secret; the SDK card field needs it + the location id. Sandbox id for the build.
     square_application_id: str | None = None
 
+    # ── QuickBooks Online (WS4 — READ-ONLY sync: detect invoice-sent + paid) ──
+    # The app NEVER creates or sends an invoice (guardrail). OAuth2; secrets in .env
+    # (git-ignored) → absent means dry-run. Sandbox for the build; production on Render
+    # later. One Intuit "developer app" for THIS app (separate from Command Centre's); the
+    # realm (company id) is captured at Connect, not configured here.
+    qbo_client_id: str | None = None
+    qbo_client_secret: str | None = None
+    qbo_environment: str = "sandbox"          # "sandbox" | "production"
+    # Must EXACTLY match a redirect URI registered on the Intuit app. localhost for local
+    # test (use http://localhost:8000, NOT 127.0.0.1 — Intuit treats them as different);
+    # Render overrides this to the onrender.com callback.
+    qbo_redirect_uri: str = "http://localhost:8000/quickbooks/callback"
+    # Fernet key encrypting the QBO OAuth tokens at rest. Absent → plaintext (dev fallback).
+    # MUST stay STABLE — rotating it makes stored tokens undecryptable (a re-connect fixes it).
+    qbo_token_key: str | None = None
+
     # ── Dropbox (auto-file job photos; TEST folder first, §4/§10) ─────────────
     dropbox_access_token: str | None = None      # or a refresh-token flow later
     dropbox_root: str = "/Island Junk TEST"      # never the live photo tree until go-live
@@ -80,6 +96,12 @@ class Settings(BaseSettings):
     @property
     def is_square_configured(self) -> bool:
         return bool(self.square_access_token and self.square_location_id)
+
+    @property
+    def is_qbo_configured(self) -> bool:
+        """True when the OAuth app credentials exist (a live connection also needs a stored
+        token — see QboConnection). Absent creds → the QB layer stays dry-run/manual-only."""
+        return bool(self.qbo_client_id and self.qbo_client_secret)
 
     @property
     def is_dropbox_configured(self) -> bool:

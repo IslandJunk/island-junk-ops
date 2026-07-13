@@ -49,12 +49,17 @@ def invoice_queue(db: DbSession, brand: Brand, today: date | None = None) -> dic
         FieldJob.brand == brand, FieldJob.type == "commercial", FieldJob.status == "done"))]
 
     materials = list(db.scalars(select(DisposalMaterial).where(DisposalMaterial.brand == brand)))
+    # BIN-xxxx rental code per bin — the QB match key the owner pastes into the invoice PO field.
+    ref_by_code = {code: ref for code, ref in db.execute(
+        select(Bin.code, Bin.reference_code).where(
+            Bin.brand == brand, Bin.reference_code.isnot(None)))}
     bins_ready = []
     for yp in db.scalars(select(YardProcessing).where(
             YardProcessing.brand == brand, YardProcessing.processed.is_(True))):
         m = compute_load_margin(yp, materials)
         bins_ready.append({
-            "code": yp.code, "customer": yp.customer, "address": yp.address, "waste_class": yp.waste_class,
+            "code": yp.code, "reference_code": ref_by_code.get(yp.code),
+            "customer": yp.customer, "address": yp.address, "waste_class": yp.waste_class,
             "processed_date": yp.processed_date.isoformat() if yp.processed_date else None,
             "charge": m["charge"], "our_cost": m["cost"], "margin": m["margin"],
             "recorded_dump_fee": m["recorded_dump_fee"],
@@ -65,7 +70,8 @@ def invoice_queue(db: DbSession, brand: Brand, today: date | None = None) -> dic
     for b in db.scalars(select(Bin).where(Bin.brand == brand, Bin.status.in_(_OUT))):
         if b.drop_date and not b.pick_date and b.drop_date <= cutoff:
             overdue.append({
-                "code": b.code, "customer": b.customer, "address": b.address,
+                "code": b.code, "reference_code": b.reference_code,
+                "customer": b.customer, "address": b.address,
                 "drop_date": b.drop_date.isoformat(), "days_out": (today - b.drop_date).days,
             })
     overdue.sort(key=lambda x: x["days_out"], reverse=True)

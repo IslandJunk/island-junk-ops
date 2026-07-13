@@ -11,7 +11,7 @@ import uuid
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session as DbSession
 
@@ -118,6 +118,16 @@ _BIN_DEC = {"base": "base", "surcharge": "surcharge", "gross": "gross", "tare": 
             "dumpFee": "dump_fee"}
 
 
+# Bins "out on rent" — the statuses that mean a rental is active (dropped, or now full).
+_OUT_STATUSES = {BinStatus.dropped, BinStatus.full}
+
+
+def _next_bin_ref(db: DbSession) -> str:
+    """Next human-readable rental code: BIN-4001, BIN-4002, ... (global, race-safe DB sequence)."""
+    n = db.execute(text("SELECT nextval('bin_ref_seq')")).scalar()
+    return f"BIN-{int(n)}"
+
+
 def apply_bins(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
     """Upsert bin state/location/rich fields by `code`. The fleet is fixed — unknown codes
     are ignored. Accepts BOTH shapes on the shared `ij_bins_v1` key: the lean registry/yard
@@ -133,6 +143,7 @@ def apply_bins(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
         b = db.scalar(select(Bin).where(Bin.brand == brand, Bin.code == rec["code"]))
         if b is None:
             continue
+        was_out = b.status in _OUT_STATUSES
 
         # status: the tracker's `status` wins over the registry `state` (a record carries one).
         st = None
@@ -180,6 +191,13 @@ def apply_bins(db: DbSession, brand: Brand, data, actor: Employee) -> dict:
             b.cleared = rec["cleared"]
         if "jobId" in rec:
             b.job_id = _as_uuid(rec.get("jobId"))
+        # Rental code: mint BIN-xxxx when the bin goes OUT on a fresh drop (transition into
+        # dropped/full). The same bin keeps its code through the rental; the next out-period
+        # re-mints. Safety-mints if a bin is out without one (e.g. legacy/lean-written rows).
+        now_out = b.status in _OUT_STATUSES
+        if now_out and (not was_out or not b.reference_code):
+            b.reference_code = _next_bin_ref(db)
+            b.rental_group_id = uuid.uuid4()
         updated += 1
     db.commit()
     return {"updated": updated}

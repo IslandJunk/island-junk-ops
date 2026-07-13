@@ -44,6 +44,13 @@ class Bin(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
         UUID(as_uuid=True), ForeignKey("job.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Rental reference — BIN-xxxx, minted when the bin goes OUT (dropped/full from a non-out
+    # state). It's the QB match key the owner pastes into the invoice PO field, and it rides the
+    # bins-out list the pickup picker uses (so drop and pickup share it via this bin/out-period).
+    # `rental_group_id` = the internal per-rental id. Both re-mint on the next fresh drop.
+    reference_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    rental_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
     # Rental / dates
     drop_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     drop_time: Mapped[time | None] = mapped_column(Time, nullable=True)

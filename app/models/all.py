@@ -24,6 +24,7 @@ from app.models import (  # noqa: F401
     maintenance,
     ops,
     owner_security,
+    qbo,
     rates,
     reminder,
     session,

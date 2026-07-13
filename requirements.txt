@@ -9,6 +9,7 @@ pydantic-settings>=2.5
 passlib>=1.7            # PIN hashing (pbkdf2_sha256 — pure-python, no native build)
 python-multipart>=0.0.9 # form posts (login)
 itsdangerous>=2.2       # signed session cookies
+cryptography>=42        # Fernet encryption of QBO OAuth tokens at rest (WS4)
 tzdata                  # zoneinfo tz database (Windows has none)
 httpx                   # required by starlette TestClient (dev/verify only)
 openpyxl                # read QuickBooks Excel (.xlsx) customer exports (§13 import)

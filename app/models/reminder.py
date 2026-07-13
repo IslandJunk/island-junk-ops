@@ -20,7 +20,7 @@ class Reminder(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     __tablename__ = "reminder"
     __table_args__ = (UniqueConstraint("brand", "source_id", name="uq_reminder_brand_source"),)
 
-    source_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    source_id: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
     kind: Mapped[ReminderKind] = mapped_column(reminder_kind_enum, nullable=False, default=ReminderKind.general)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     by: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -38,3 +38,6 @@ class Reminder(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # cc_charge: the BIN-xxxx rental code (from the invoiceable bin) so the owner can paste it
+    # into the QuickBooks invoice PO field and WS4 can match the sent/paid invoice back to here.
+    reference_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)

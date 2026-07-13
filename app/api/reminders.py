@@ -7,7 +7,7 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
@@ -27,6 +27,7 @@ class CcChargeIn(BaseModel):
     job_id: uuid.UUID | None = None
     name: str | None = None
     addr: str | None = None
+    reference_code: str | None = Field(default=None, max_length=20)  # BIN-xxxx — the QB match key (varchar(20))
 
 
 def _owner_or_403(request: Request, emp: Employee) -> Brand:
@@ -39,7 +40,7 @@ def _out(r: Reminder) -> dict:
     return {"id": r.source_id, "kind": r.kind.value, "text": r.text, "by": r.by,
             "due": r.due.isoformat() if r.due else None, "done": r.done,
             "name": r.name, "addr": r.addr, "job_id": str(r.job_id) if r.job_id else None,
-            "calendar": r.calendar}
+            "reference_code": r.reference_code, "calendar": r.calendar}
 
 
 @router.post("/cc-charge")
@@ -51,7 +52,8 @@ def create_cc_charge(body: CcChargeIn, request: Request, db: DbSession = Depends
     brand = _owner_or_403(request, emp)
     inv = body.invoice_date or date.today()
     r = add_cc_charge_reminder(db, brand, invoice_date=inv, job_id=body.job_id,
-                               name=body.name, addr=body.addr, by=emp.name, commit=True)
+                               name=body.name, addr=body.addr, by=emp.name,
+                               reference_code=body.reference_code, commit=True)
     return _out(r)
 
 
