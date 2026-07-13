@@ -17,8 +17,15 @@
   function cardStatus(msg) { if (statusEl) statusEl.textContent = msg; }
 
   fetch("/square/status", { credentials: "same-origin" })
-    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (r) {
+      if (r.status === 401 || r.status === 403) return { __notauth: true };
+      return r.ok ? r.json() : null;
+    })
     .then(function (st) {
+      if (st && st.__notauth) {
+        cardStatus("Please sign in first — open the Main Hub, log in, then reopen this page.");
+        return;
+      }
       if (!st || !st.configured || !st.application_id || !st.location_id) {
         cardStatus("Square isn't connected yet — a card can't be saved until it is.");
         return;
