@@ -44,6 +44,66 @@ app.include_router(sms_router)
 app.include_router(sync_router)
 app.include_router(yard_router)
 
+
+# ── Public legal pages (required by Intuit to unlock QuickBooks production keys) ──────────────
+# The app is an INTERNAL tool, but Intuit's app profile needs public EULA + privacy URLs. These
+# live on the app's own domain so they're always reachable. Plain static HTML, no data access.
+_LEGAL_WRAP = ('<!doctype html><meta charset="utf-8">'
+               '<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title>'
+               '<div style="font-family:Inter,system-ui,sans-serif;max-width:760px;margin:6vh auto;'
+               'padding:0 22px;color:#222;line-height:1.6">{body}'
+               '<p style="margin-top:32px;color:#888;font-size:13px">Island Junk Solutions · '
+               'contact: wes@islandjunk.com</p></div>')
+
+_PRIVACY_HTML = _LEGAL_WRAP.format(title="Privacy Policy — Island Junk Operations App", body=(
+    "<h1>Privacy Policy</h1><p><em>Island Junk Operations App — last updated July 2026</em></p>"
+    "<p>The Island Junk Operations App (the “App”) is a private, internal tool used by Island "
+    "Junk Solutions (“we”, “us”) to run our junk-removal and bin-rental operations. It "
+    "is not a public consumer product; access is limited to our authorized staff.</p>"
+    "<h3>Information we handle</h3><p>The App stores operational data our staff enter — bookings, job "
+    "details, crew assignments, bin tracking, customer contact details, and job photos. It connects to "
+    "third-party services we use to run the business: QuickBooks Online, Square, Twilio, Google Calendar, "
+    "and Dropbox.</p>"
+    "<h3>QuickBooks Online</h3><p>With your authorization, the App connects to QuickBooks Online in "
+    "<strong>read-only</strong> mode. It reads invoice and payment status to track which jobs have been "
+    "invoiced and paid. The App never creates, edits, sends, or deletes anything in QuickBooks, and never "
+    "accesses data beyond what is needed for this purpose.</p>"
+    "<h3>How we use information</h3><p>Solely to operate our business — scheduling, dispatch, invoicing "
+    "follow-up, and customer communication. We do not sell your information, and we share it only with the "
+    "service providers above as needed to run the App.</p>"
+    "<h3>Security &amp; retention</h3><p>Access is restricted to authorized staff via per-user login; "
+    "sensitive credentials and access tokens are stored encrypted. Operational records are retained as long "
+    "as needed for business and legal purposes.</p>"
+    "<h3>Contact</h3><p>Questions about this policy: wes@islandjunk.com.</p>"))
+
+_EULA_HTML = _LEGAL_WRAP.format(title="End User License Agreement — Island Junk Operations App", body=(
+    "<h1>End User License Agreement</h1><p><em>Island Junk Operations App — last updated July 2026</em></p>"
+    "<p>This agreement governs use of the Island Junk Operations App (the “App”), provided by "
+    "Island Junk Solutions.</p>"
+    "<h3>1. License</h3><p>The App is licensed for use solely by Island Junk Solutions’ authorized "
+    "staff to operate the business. No other use is licensed.</p>"
+    "<h3>2. Acceptable use</h3><p>Users will access the App only as authorized and only for legitimate "
+    "business purposes.</p>"
+    "<h3>3. Third-party services</h3><p>The App integrates with third-party services (including QuickBooks "
+    "Online, used in read-only mode). Use of those services is subject to their own terms.</p>"
+    "<h3>4. No warranty</h3><p>The App is provided “as is,” without warranties of any kind, to the "
+    "extent permitted by law.</p>"
+    "<h3>5. Limitation of liability</h3><p>To the extent permitted by law, Island Junk Solutions is not "
+    "liable for indirect or consequential damages arising from use of the App.</p>"
+    "<h3>6. Governing law</h3><p>This agreement is governed by the laws of British Columbia, Canada.</p>"
+    "<h3>7. Contact</h3><p>wes@islandjunk.com.</p>"))
+
+
+@app.get("/legal/privacy", response_class=HTMLResponse)
+def legal_privacy() -> HTMLResponse:
+    return HTMLResponse(_PRIVACY_HTML)
+
+
+@app.get("/legal/eula", response_class=HTMLResponse)
+def legal_eula() -> HTMLResponse:
+    return HTMLResponse(_EULA_HTML)
+
+
 _PROTOTYPES = Path(__file__).resolve().parent.parent / "prototypes"
 _STATIC = Path(__file__).resolve().parent / "static"
 _MAIN_HUB_HTML = _PROTOTYPES / "island-junk-main-hub.html"
