@@ -17,12 +17,15 @@ rejected (auth expiry) in favour of card-on-file. **Shipped + verified:**
   `28c686247d41`, applied). Endpoints: `POST /square/save-card` (manager), `GET /square/card-on-file`,
   `POST /square/charge-card-on-file` (**owner-only** — 403 for managers). All verified against **Square
   SANDBOX** end-to-end (save VISA ••5858 → owner charge $25.60 COMPLETED + audit row → manager blocked).
-  The **"Charge card on file" button** is DONE + verified live (owner queue → check card → invoice total →
-  +2.4% shown → charge → reminder closed; sandbox VISA ••5858, $100→$102.40 COMPLETED, audit row).
-  **Remaining WS3 = ONE thing:** the **Web Payments SDK card field at bin booking** (tokenize → save-card) —
-  needs Wes live to enter a Square test card (can't automate typing into Square's secure iframe).
-  `square_application_id` in config (public, for the SDK). NOTE: astral emojis (💳/💵) corrupt to lone
-  surrogates on serve here — keep bridge button text ASCII.
+  **WS3 is COMPLETE + proven live.** Owner "Charge card on file" button (check card → invoice total → +2.4%
+  shown → charge → reminder closed; sandbox VISA ••5858, $100→$102.40 COMPLETED, audit row). Card **capture**
+  field: `/app/save-card` page + `save-card-bridge.js` loads Square's Web Payments SDK, renders Square's own
+  secure card iframe, tokenizes → `/square/save-card` — Wes entered a real Square test card and it saved
+  (VISA ••1111, `ccof:` token only, no PAN/CVV). `square_application_id` + `location_id` on `/square/status`
+  for the SDK. **Follow-on (small):** the card field is a standalone page today — link/embed it into the bin-
+  booking bin lane. NOTE: astral emojis corrupt to lone surrogates on serve here — keep bridge text ASCII.
+  Sandbox test card 4111… is US so the field shows US "ZIP" (Square has no CA test card); real CA cards show
+  a postal-code field automatically.
 
 **Square SANDBOX connected LOCALLY** — sandbox creds in the git-ignored local `.env`
 (`SQUARE_ENVIRONMENT=sandbox`, app id `sandbox-sq0idb-…`, location `L57750E6QHVHF` "Default Test Account" CAD).
