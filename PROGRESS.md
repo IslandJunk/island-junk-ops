@@ -25,7 +25,11 @@ and confirmed working on the REAL books. Migration head **`206c2604ac57`**; late
   secret Wes typed straight into Render, so it's safe); (2) add a "generate backup codes" flow for 2FA (owner has none —
   phone-loss recovery is DB-only today); (3) extend `require_owner_2fa` to more owner endpoints if wanted (sync / toggle
   / reads); (4) optional `intuit_tid` logging on QBO errors; (5) connect Nanaimo's QB company ("Island Junk Solutions
-  Nanaimo Ltd.") from the Nanaimo workspace when it's set up. **Day-to-day QB use:** put the `BIN-####` from the owner
+  Nanaimo Ltd.") from the Nanaimo workspace when it's set up; (6) **SECURITY (do soon):** the owner + manager login
+  PINs were the seeded defaults and had been committed in this handoff doc — now scrubbed from the current file, but
+  still present in git HISTORY. **Change the owner PIN** (and manager/crew PINs), and confirm whether the GitHub repo
+  `IslandJunk/island-junk-ops` is **public** (couldn't auto-check — `gh` isn't installed); if public, rotating the PIN
+  is important. **Day-to-day QB use:** put the `BIN-####` from the owner
   Ready-to-invoice list on the real QuickBooks invoice (Message field) → tap "Sync QuickBooks now" (or flip Auto-sync ON).
 
 **2026-07-14 (WS4 auto-sync live + owner SMS-2FA backend)** —
