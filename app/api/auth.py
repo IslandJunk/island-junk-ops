@@ -205,3 +205,15 @@ def twofa_verify(body: CodeIn, request: Request, db: DbSession = Depends(get_db)
     if not twofa.verify_code(db, sess, body.code):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired code")
     return {"verified": True}
+
+
+@router.post("/2fa/lock")
+def twofa_lock(request: Request, db: DbSession = Depends(get_db),
+               emp: Employee = Depends(get_current_employee)) -> dict:
+    """Re-lock the Owner Hub: clear THIS session's 2FA-verified flag so the next load shows the
+    real gate again and sensitive owner actions re-require a fresh code. Owner-only. (The PIN
+    session stays; only the second factor is dropped.)"""
+    sess = _owner_session(request, emp)
+    sess.owner_2fa_verified = False
+    db.commit()
+    return {"locked": True}

@@ -411,6 +411,86 @@
       + body + '<button class="btn2" onclick="closeSheet()" style="margin-top:12px">Close</button>');
   }
 
+  // ── Real "Security · sign-in" sheet (replaces the prototype's simulated securitySheet) ──
+  // Wired to the Security settings tile via the openSheet override below. Manages the owner's
+  // 2FA phone + recovery email (same endpoints the sign-in gate uses) and can re-lock the hub.
+  var SEC_IN = "width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #d8d3cc;border-radius:10px;font-size:15px;margin-top:8px";
+  function secField(label, sub, inputId, placeholder, btnId, btnLabel) {
+    return card('<b>' + esc(label) + "</b>"
+      + '<div class="meta" style="margin-top:4px">' + sub + "</div>"
+      + '<input id="' + inputId + '" style="' + SEC_IN + '" placeholder="' + esc(placeholder) + '">'
+      + '<button class="btn2" id="' + btnId + '" style="margin-top:8px;font-size:12.5px;padding:7px 10px">' + esc(btnLabel) + "</button>"
+      + '<div id="' + btnId + '_m" class="meta" style="margin-top:6px"></div>');
+  }
+  function secSave(btnId, inpId, url, key, okMsg) {
+    var b = document.getElementById(btnId), m = document.getElementById(btnId + "_m");
+    var payload = {}; payload[key] = (document.getElementById(inpId).value || "").trim();
+    var label = b.textContent;
+    b.disabled = true; b.textContent = "Saving...";
+    fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        b.disabled = false; b.textContent = label;
+        if (res.ok) { m.style.color = "#3CA03C"; m.textContent = okMsg(res.j); }
+        else { m.style.color = "#C0392B"; m.textContent = (res.j && res.j.detail) || "Couldn't save - try again."; }
+      }).catch(function () { b.disabled = false; b.textContent = label; m.style.color = "#C0392B"; m.textContent = "Couldn't reach the server."; });
+  }
+  window.__ijLock = function () {
+    fetch("/auth/2fa/lock", { method: "POST", credentials: "same-origin" })
+      .then(function () { window.location.reload(); }).catch(function () { window.location.reload(); });
+  };
+  window.__ijSecuritySheet = function () {
+    fetch("/auth/2fa/status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
+      st = st || {};
+      var body = '<div class="note" style="margin-top:6px">Owner sign-in is your PIN plus a 6-digit code. Choose where that code can go, or lock the hub.</div>';
+      body += secField("Text (SMS) number",
+        st.phone_masked ? ("Codes text to <b>" + esc(st.phone_masked) + "</b>") : "No number set yet",
+        "ijScPhone", "New cell, e.g. 250-555-1234", "ijScPhoneB", "Save number");
+      if (st.email_channel_ready) {
+        body += secField("Recovery email",
+          st.email_set ? ("Codes can email to <b>" + esc(st.email_masked) + "</b> - your backup if the phone is lost")
+                       : "Not set - add one so you can still get a code without your phone",
+          "ijScEmail", "you@example.com", "ijScEmailB", st.email_set ? "Change email" : "Add recovery email");
+      } else {
+        body += card("<b>Recovery email</b>" + '<div class="meta" style="margin-top:4px">Turns on once the email sender is configured on the server. Until then, SMS is the only channel.</div>');
+      }
+      body += '<div style="margin-top:14px"><button class="btn2" onclick="__ijLock()" style="font-size:12.5px;padding:8px 12px">Lock the Owner Hub now</button></div>';
+      body += '<button class="btn2" onclick="closeSheet()" style="margin-top:12px">Close</button>';
+      window.sheet("Security - sign-in", body);
+      var pb = document.getElementById("ijScPhoneB");
+      if (pb) pb.onclick = function () {
+        var m = document.getElementById("ijScPhoneB_m");
+        if ((document.getElementById("ijScPhone").value || "").replace(/\D/g, "").length < 10) { m.style.color = "#C0392B"; m.textContent = "Enter a valid phone number."; return; }
+        secSave("ijScPhoneB", "ijScPhone", "/auth/2fa/set-phone", "number", function (j) { return "Saved - codes now text to " + (j.phone_masked || "your number"); });
+      };
+      var eb = document.getElementById("ijScEmailB");
+      if (eb) eb.onclick = function () {
+        var v = (document.getElementById("ijScEmail").value || "").trim(), m = document.getElementById("ijScEmailB_m");
+        if (v.indexOf("@") < 1 || v.indexOf(".", v.indexOf("@")) < 0) { m.style.color = "#C0392B"; m.textContent = "Enter a valid email address."; return; }
+        secSave("ijScEmailB", "ijScEmail", "/auth/2fa/set-email", "address", function (j) { return "Saved - recovery email " + (j.email_masked || ""); });
+      };
+    }).catch(function () {
+      window.sheet("Security", '<div class="meta" style="margin-top:10px">Couldn\'t load your security settings - try again.</div><button class="btn2" onclick="closeSheet()" style="margin-top:12px">Close</button>');
+    });
+  };
+
+  // Route the "Security" + "Auto-invoicing" settings tiles to the REAL sheets (the prototype's
+  // simulated securitySheet()/autoSheet() are replaced). Everything else falls through.
+  if (typeof window.openSheet === "function") {
+    var _ijOpenSheet = window.openSheet;
+    window.openSheet = function (k) {
+      if (k === "security") return window.__ijSecuritySheet();
+      if (k === "autoinvoice") {
+        if (window.__ijQbo) return qboSheet(window.__ijQbo);
+        return fetch("/quickbooks/status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (qb) { window.__ijQbo = qb; qboSheet(qb); });
+      }
+      return _ijOpenSheet.apply(this, arguments);
+    };
+  }
+  // Make the hub's "Lock" button re-lock with the REAL gate (clear the 2FA flag), not the sim gate.
+  if (typeof window.lock === "function") { window.lock = window.__ijLock; }
+
   Promise.all([
     fetch("/invoice-queue", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
     fetch("/reminders?kind=cc_charge", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
@@ -422,10 +502,12 @@
     window.__ijAwaiting = (R && R.reminders) || [];
     window.__ijQbo = QB;
     var alerts = [];
-    if (QB && QB.configured) {
-      alerts.push({ k: "oa_qbo", dot: QB.connected ? "#3CA03C" : "#8a8a8a", nm: "QuickBooks",
-        sb: QB.connected ? ((QB.company_name || "Connected") + (QB.auto_sync_enabled ? " · auto-sync ON" : " · manual")) : "Not connected — tap to connect",
-        count: "" });
+    // QuickBooks lives in the "Auto-invoicing" settings tile now. Surface it in "Needs you" ONLY
+    // when it needs attention (configured but disconnected). Connected + auto-syncing -> stays out
+    // of the action list (Wes 2026-07-14).
+    if (QB && QB.configured && !QB.connected) {
+      alerts.push({ k: "oa_qbo", dot: "#E8A317", nm: "QuickBooks",
+        sb: "Not connected - reconnect to keep invoice sync going", count: "" });
     }
     if (Q && Q.counts.ready > 0) {
       alerts.push({ k: "oa_invoice", dot: "#3CA03C", nm: "Ready to invoice", sb: "Completed jobs, all captured", count: String(Q.counts.ready) });

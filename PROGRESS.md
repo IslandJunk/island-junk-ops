@@ -1,5 +1,23 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (Email 2FA ACTIVATED + in-hub Security panel + QuickBooks tidy)** —
+- **Email 2FA is LIVE + activated.** Wes set up SendGrid (verified single sender `wes@islandjunk.com`, Mail-Send-only
+  API key; `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` set in Render), added `wesroberts@hotmail.ca` as the recovery
+  email, and verified an **emailed code end-to-end on prod**. Email is now the phone-loss recovery path (no backup codes).
+- **In-hub "Security - sign-in" panel (NEW).** The Owner-Hub **Security** settings tile now opens a REAL sheet (was the
+  prototype's simulated one) via an `openSheet` override in `owner-hub-bridge.js`: manage the 2FA SMS number
+  (`/auth/2fa/set-phone`), add/change the recovery email (`/auth/2fa/set-email`, shown when `email_channel_ready`), and
+  **Lock the Owner Hub now**. New owner-only `POST /auth/2fa/lock` clears the session's `owner_2fa_verified` so the next
+  load re-prompts the real gate; the hub's existing "Lock" button is overridden to use it (it previously fell back to the
+  simulated password gate). No migration. Fixes the earlier gap where recovery email could only be set from the signed-out gate.
+- **QuickBooks placement (Wes's call).** QB controls (Connect/Sync/Auto-sync/Disconnect) are now wired into the prototype's
+  intended **"Auto-invoicing"** settings tile (`openSheet('autoinvoice')` -> `qboSheet`). In **"Needs you"**, QB shows ONLY
+  when it needs attention (configured but **disconnected**); connected + auto-syncing -> stays out of the action list. WS4 QB
+  itself is done + live (only Nanaimo's company left to connect when that workspace is built).
+- **Verified** in-browser against the prod DB: bridge parses clean (no console errors); Security sheet renders in both
+  SendGrid-on and -off states with phone+email wired to live endpoints; QB absent from "Needs you" while connected; the
+  Auto-invoicing tile opens the QB sheet. Files: `app/api/auth.py` (+`/2fa/lock`), `app/static/owner-hub-bridge.js`.
+
 **2026-07-14 (Owner 2FA — EMAIL channel added; dormant until SendGrid is set)** — Built a second 2FA delivery
 channel so email can be the owner's phone-loss recovery path (Wes chose email over backup codes; recovery address
 = wesroberts@hotmail.ca, to be stored via the gate's "Add a recovery email" once the channel is live). The 2FA
