@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from app.api.deps import active_brand_for, get_current_employee
+from app.api.deps import active_brand_for, get_current_employee, require_owner_2fa
 from app.auth.guards import is_owner
 from app.core.config import settings
 from app.db.session import get_db
@@ -128,8 +128,7 @@ def charge_card(body: ChargeCardIn, request: Request, db: DbSession = Depends(ge
     """Charge a customer's saved card (OWNER ONLY — the manager cannot). THE one charge action,
     fired only from an owner tap (never automatic). Idempotent per job. Records a CardCharge
     audit row either way. On decline, returns a reason and leaves the job unpaid."""
-    if not is_owner(emp):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner only")
+    require_owner_2fa(request, emp)   # money out — owner + a verified 2FA session
     brand = active_brand_for(request, emp)
     q = select(StoredCard).where(StoredCard.brand == brand, StoredCard.active.is_(True))
     if body.stored_card_id:

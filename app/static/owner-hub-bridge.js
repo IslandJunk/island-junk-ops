@@ -1,3 +1,78 @@
+/* Island Junk — Owner Hub REAL SMS 2FA gate.
+ * Replaces the prototype's simulated password/code gate with a server-verified SMS code. On load:
+ * an already-verified session reveals the hub; else run the real flow (set cell first time -> text
+ * a code -> verify -> reveal). Sensitive owner actions (charging, QuickBooks connect/disconnect)
+ * are ALSO enforced server-side (require_owner_2fa), so this is a real gate, not a UI curtain.
+ */
+(function () {
+  var gate = document.getElementById("gate");
+  if (!gate) return;
+  function post(u, b) {
+    return fetch(u, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: b ? JSON.stringify(b) : undefined }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+    });
+  }
+  function reveal() {
+    if (typeof unlock === "function") { unlock(); return; }
+    gate.style.display = "none"; var h = document.getElementById("hub"); if (h) h.style.display = "block";
+  }
+  var IN = "width:100%;box-sizing:border-box;padding:13px;border:1.5px solid #d8d3cc;border-radius:11px;font-size:16px;margin:10px 0";
+  var BT = "width:100%;background:#F05014;color:#fff;border:0;font-weight:700;padding:13px;border-radius:11px;font-size:15px;cursor:pointer";
+  var LK = "background:none;border:0;color:#777;text-decoration:underline;font-size:13px;margin-top:10px;cursor:pointer";
+  function shell(inner) {
+    gate.innerHTML = '<div style="max-width:420px;margin:12vh auto;padding:0 22px;font-family:Inter,system-ui,sans-serif;text-align:center;color:#141414">'
+      + '<div style="font-family:Anton,system-ui,sans-serif;font-size:26px;letter-spacing:.02em">OWNER SIGN-IN</div>'
+      + '<div id="tfmsg" style="color:#555;font-size:14px;margin:10px 0 4px"></div>' + inner + "</div>";
+  }
+  function msg(t, c) { var m = document.getElementById("tfmsg"); if (m) { m.textContent = t; m.style.color = c || "#555"; } }
+  function setPhone() {
+    shell('<input id="tfp" type="tel" inputmode="tel" placeholder="Your cell, e.g. 250-555-1234" style="' + IN + '">'
+      + '<button id="tfs" style="' + BT + '">Save &amp; text me a code</button>');
+    msg("First time: add the cell that receives your sign-in codes.");
+    document.getElementById("tfs").onclick = function () {
+      var n = document.getElementById("tfp").value.trim();
+      if (n.replace(/\D/g, "").length < 10) { msg("Enter a valid phone number", "#C0392B"); return; }
+      this.disabled = true; this.textContent = "Saving..."; post("/auth/2fa/set-phone", { number: n }).then(function () { requestCode(); });
+    };
+  }
+  function codeEntry(masked) {
+    shell('<input id="tfc" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" style="' + IN + ';letter-spacing:5px;text-align:center">'
+      + '<button id="tfv" style="' + BT + '">Verify</button>'
+      + '<div><button id="tfr" style="' + LK + '">Text a new code</button></div>'
+      + '<div><button id="tfb" style="' + LK + '">Locked out? Enter a backup code above</button></div>');
+    msg("Enter the 6-digit code texted to " + (masked || "your phone") + ".");
+    var v = document.getElementById("tfv");
+    function go() {
+      var c = document.getElementById("tfc").value.trim(); if (!c) return;
+      v.disabled = true; v.textContent = "Checking...";
+      post("/auth/2fa/verify", { code: c }).then(function (res) {
+        if (res.ok && res.j && res.j.verified) { reveal(); }
+        else { v.disabled = false; v.textContent = "Verify"; msg("Wrong or expired code - try again.", "#C0392B"); }
+      });
+    }
+    v.onclick = go;
+    document.getElementById("tfc").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    document.getElementById("tfr").onclick = function () { requestCode(); };
+    document.getElementById("tfb").onclick = function () {
+      var i = document.getElementById("tfc"); i.placeholder = "backup code"; i.focus(); msg("Enter a backup code, then Verify.");
+    };
+  }
+  function requestCode() {
+    shell('<div style="color:#777;margin-top:16px">Texting your code...</div>');
+    post("/auth/2fa/request").then(function (res) {
+      if (res.status === 409) { setPhone(); return; }
+      codeEntry(res.j && res.j.to_masked);
+    }).catch(function () { codeEntry(null); });
+  }
+  fetch("/auth/2fa/status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
+    if (!st) return;                       // not owner / not signed in -> leave the prototype gate alone
+    if (st.verified) { reveal(); return; }
+    if (st.phone_set) { requestCode(); } else { setPhone(); }
+  }).catch(function () {});
+})();
+
+
 /* Island Junk — Owner Hub bridge.
  * Injected after the approved owner-hub prototype (file untouched). Replaces the
  * hardcoded demo OWNER_ALERTS ("Ready to invoice", "Bins to bill / overdue") with the

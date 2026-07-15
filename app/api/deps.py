@@ -88,3 +88,14 @@ def require_manager(emp: Employee = Depends(get_current_employee)) -> Employee:
     if not (is_owner(emp) or "manager" in (emp.access or [])):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Manager access required")
     return emp
+
+
+def require_owner_2fa(request: Request, emp: Employee) -> None:
+    """Owner AND a 2FA-verified session — the gate for sensitive owner ACTIONS (card charging,
+    QuickBooks connect/disconnect). Reads stay on the plain owner check so the Owner Hub can load
+    behind the gate. Not a Depends (endpoints already resolve `request`+`emp`); call it inline."""
+    if not is_owner(emp):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner only")
+    sess = getattr(request.state, "session", None)
+    if sess is None or not getattr(sess, "owner_2fa_verified", False):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner 2FA required")

@@ -19,7 +19,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from app.api.deps import active_brand_for, get_current_employee
+from app.api.deps import active_brand_for, get_current_employee, require_owner_2fa
 from app.auth.guards import is_owner
 from app.core.config import settings
 from app.db.session import get_db
@@ -70,7 +70,7 @@ def _done_page(message: str, ok: bool) -> HTMLResponse:
 def connect(request: Request, emp: Employee = Depends(get_current_employee)) -> Response:
     """Owner taps 'Connect QuickBooks' -> redirect to Intuit consent. State is signed to this
     owner + the active brand so the callback can verify it and know which brand to attach."""
-    _require_owner(emp)
+    require_owner_2fa(request, emp)
     if not qbo.is_configured():
         return _done_page("QuickBooks isn't configured yet (missing client id/secret).", ok=False)
     brand = active_brand_for(request, emp)
@@ -155,7 +155,7 @@ def qbo_status(request: Request, db: DbSession = Depends(get_db),
 def disconnect(request: Request, db: DbSession = Depends(get_db),
                emp: Employee = Depends(get_current_employee)) -> dict:
     """Owner disconnects QB for this brand. Auto-sync stops; the manual buttons carry on."""
-    _require_owner(emp)
+    require_owner_2fa(request, emp)
     brand = active_brand_for(request, emp)
     conn = _active_connection(db, brand)
     if conn is not None:
