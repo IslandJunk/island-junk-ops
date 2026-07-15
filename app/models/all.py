@@ -17,6 +17,7 @@ from app.models import (  # noqa: F401
     contract,
     customer,
     dayboard,
+    dropbox,
     employee,
     field_job,
     incident,

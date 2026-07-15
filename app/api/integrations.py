@@ -171,27 +171,4 @@ def charge_card(body: ChargeCardIn, request: Request, db: DbSession = Depends(ge
             "brand": sc.card_brand, "last4": sc.card_last4}
 
 
-# ── Dropbox: auto-file job photos (TEST folder first) ─────────────────────────
-class JobPhotoIn(BaseModel):
-    job_ref: str
-    filename: str
-    data_url: str      # data:image/...;base64,...  (from the crew form)
-
-
-@router.post("/dropbox/job-photo")
-def dropbox_job_photo(body: JobPhotoIn, emp: Employee = Depends(get_current_employee)) -> dict:
-    """File one job photo into the job's Dropbox folder (any signed-in crew). Writes only
-    under the configured TEST root; dry-run until Dropbox creds are set."""
-    try:
-        return dropbox_files.upload_job_photo(
-            job_ref=body.job_ref, filename=body.filename, data_url=body.data_url)
-    except dropbox_files.DropboxGuardError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-
-
-@router.get("/dropbox/status")
-def dropbox_status(emp: Employee = Depends(get_current_employee)) -> dict:
-    _manager_or_owner(emp)
-    return {"configured": dropbox_files.is_configured(),
-            "mode": "live" if dropbox_files.is_configured() else "dry_run",
-            "root": settings.dropbox_root}
+# Dropbox connect + per-job photo filing moved to app/api/dropbox.py (OAuth) — see that router.

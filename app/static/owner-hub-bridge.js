@@ -474,12 +474,44 @@
     });
   };
 
-  // Route the "Security" + "Auto-invoicing" settings tiles to the REAL sheets (the prototype's
-  // simulated securitySheet()/autoSheet() are replaced). Everything else falls through.
+  // ── Dropbox connect (Linked apps tile) — real "Connect Dropbox" for per-job photo filing ──
+  window.__ijDbxConnect = function () { window.location.href = "/dropbox/connect"; };
+  window.__ijDbxDisconnect = function (btn) {
+    btn.disabled = true; btn.textContent = "Disconnecting...";
+    fetch("/dropbox/disconnect", { method: "POST", credentials: "same-origin" })
+      .then(function () { window.location.reload(); })
+      .catch(function () { btn.disabled = false; btn.textContent = "Disconnect"; });
+  };
+  function dropboxSheet(DBX) {
+    var body;
+    if (!DBX || !DBX.configured) {
+      body = '<div class="meta" style="margin-top:10px">Dropbox isn\'t set up on the server yet (no app key/secret).</div>';
+    } else if (DBX.connected) {
+      body = card("<b>Connected</b> &middot; " + esc(DBX.account_name || DBX.account_email || "your Dropbox")
+        + '<div class="meta" style="margin-top:6px;color:#3CA03C;font-weight:700">Job photos file under ' + esc(DBX.root) + "</div>"
+        + (DBX.connected_by ? ('<div class="meta" style="margin-top:4px">by ' + esc(DBX.connected_by) + "</div>") : ""))
+        + '<div style="margin-top:9px"><button class="btn2" style="font-size:12.5px;padding:7px 10px" onclick="__ijDbxDisconnect(this)">Disconnect</button></div>';
+    } else {
+      body = '<div class="meta" style="margin-top:10px">Not connected. Connect your Dropbox so job photos auto-file into a folder per job (and a link rides onto the calendar event at booking).</div>'
+        + '<button class="btn2" style="margin-top:10px" onclick="__ijDbxConnect()">Connect Dropbox</button>';
+    }
+    window.sheet("Dropbox - job photos",
+      '<div class="note" style="margin-top:6px">Photos attached to a job (booking, crew, yard, bins) file into that job\'s Dropbox folder, so you can find them all from the calendar. Test folder until go-live.</div>'
+      + body + '<button class="btn2" onclick="closeSheet()" style="margin-top:12px">Close</button>');
+  }
+  window.__ijDropboxSheet = function () {
+    if (window.__ijDbx) return dropboxSheet(window.__ijDbx);
+    fetch("/dropbox/status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { window.__ijDbx = d; dropboxSheet(d); }).catch(function () { dropboxSheet(null); });
+  };
+
+  // Route the "Security" + "Linked apps" + "Auto-invoicing" settings tiles to the REAL sheets (the
+  // prototype's simulated securitySheet()/appsSheet()/autoSheet() are replaced). Else fall through.
   if (typeof window.openSheet === "function") {
     var _ijOpenSheet = window.openSheet;
     window.openSheet = function (k) {
       if (k === "security") return window.__ijSecuritySheet();
+      if (k === "apps") return window.__ijDropboxSheet();
       if (k === "autoinvoice") {
         if (window.__ijQbo) return qboSheet(window.__ijQbo);
         return fetch("/quickbooks/status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; })

@@ -81,7 +81,13 @@ class Settings(BaseSettings):
     qbo_token_key: str | None = None
 
     # ── Dropbox (auto-file job photos; TEST folder first, §4/§10) ─────────────
-    dropbox_access_token: str | None = None      # or a refresh-token flow later
+    # Durable OAuth connect (like QBO): app key/secret in .env / Render; the owner connects once
+    # in the Owner Hub -> access + refresh tokens stored encrypted (dropbox_connection). Tokens use
+    # the same Fernet key as QBO (qbo_token_key). The legacy static token stays as a dev fallback.
+    dropbox_app_key: str | None = None
+    dropbox_app_secret: str | None = None
+    dropbox_redirect_uri: str = "http://localhost:8000/dropbox/callback"
+    dropbox_access_token: str | None = None      # legacy static token (dev/dry-run fallback)
     dropbox_root: str = "/Island Junk TEST"      # never the live photo tree until go-live
 
     # ── SendGrid (owner-2FA email codes — a second, recovery delivery channel to SMS) ──
@@ -113,6 +119,11 @@ class Settings(BaseSettings):
     @property
     def is_dropbox_configured(self) -> bool:
         return bool(self.dropbox_access_token)
+
+    @property
+    def is_dropbox_oauth_configured(self) -> bool:
+        """Dropbox OAuth app credentials present (a live connection also needs a stored token)."""
+        return bool(self.dropbox_app_key and self.dropbox_app_secret)
 
     @property
     def is_email_configured(self) -> bool:

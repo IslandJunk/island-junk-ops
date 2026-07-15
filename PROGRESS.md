@@ -1,5 +1,29 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (Dropbox photo SYSTEM — Phase 1a: durable OAuth connect shipped)** — Wes refined the photo plan
+into a fuller system: Dropbox as the per-job store, with a **stable folder LINK dropped into the job's Google
+Calendar event AT BOOKING** (honors the "calendar write only at booking" guardrail — NO per-photo event
+edits), so searching a job in Calendar -> click the link -> all its photos (befores, afters, yard, bin issues,
+customer sends). Crew before/after **stay in Messenger**. This supersedes the in-app Postgres storage from the
+prior entry — the booking-photo button + Day Board strip become the front-end; the store moves to Dropbox.
+- **Phase 1a (this commit) — durable Dropbox OAuth connect, mirrors QuickBooks.** New `dropbox_connection`
+  table (single row — ONE account; brand = folder path; migration **`d7a3f9c2e1b8`, new head**), tokens
+  Fernet-encrypted (same `qbo_token_key`). `app/integrations/dropbox_oauth.py` (authorize/exchange/refresh/
+  get_current_account + `get_valid_access_token` on-demand refresh; Dropbox refresh tokens don't rotate,
+  access ~4h). Owner-only `app/api/dropbox.py`: `/dropbox/connect|callback|status|disconnect` (2FA on
+  connect/disconnect; signed, time-boxed CSRF state; SameSite=Lax cookie survives the redirect). Owner-Hub
+  **"Linked apps"** tile -> real **Connect Dropbox** card (`owner-hub-bridge.js`). Config: `DROPBOX_APP_KEY` /
+  `DROPBOX_APP_SECRET` / `DROPBOX_REDIRECT_URI` (`is_dropbox_oauth_configured`). Removed the legacy
+  static-token `/dropbox/job-photo` + `/dropbox/status` from `integrations.py`. Verified: imports; migration
+  linear; owner-hub parses clean; Dropbox sheet renders (shows "not set up" until app creds exist).
+- **TO ACTIVATE (Wes):** create a Dropbox app (App Console -> Scoped access -> Full Dropbox), scopes
+  `account_info.read files.metadata.read files.content.write files.content.read sharing.write`, add redirect
+  URIs (`http://localhost:8000/dropbox/callback` + `https://island-junk-ops.onrender.com/dropbox/callback`),
+  set `DROPBOX_APP_KEY` + `DROPBOX_APP_SECRET` in Render -> Owner Hub -> Linked apps -> Connect Dropbox.
+- **STILL TO BUILD (after connect):** per-job Dropbox folder + shared link into the booking calendar event
+  (at booking only); repoint the booking photos + Day Board strip from Postgres `job_photo` to the Dropbox job
+  folder. Then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage -> bin folder + alert).
+
 **2026-07-14 (Job reference photos — manager attaches, crew see on the Day Board; Dropbox NOT used)** —
 Started as "set up Dropbox photo filing," but talking through the real workflow we landed somewhere simpler
 and better. The crew's before/after photos **stay in Facebook Messenger** (fast, searchable by address —
