@@ -17,8 +17,10 @@ class OwnerSecurity(Base, UUIDPkMixin, TimestampMixin):
     __tablename__ = "owner_security"
 
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    # [{id, label, number}] — 2FA destinations
+    # [{id, label, number}] — 2FA destinations (SMS)
     phones: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    # [{id, label, address}] — 2FA destinations (email; recovery channel alongside SMS)
+    emails: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
     # [{code, used}] — one-time recovery codes
     backup_codes: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
     # [{at, action, detail, brand}] — owner action audit, capped in app logic (~500)

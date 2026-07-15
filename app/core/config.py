@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     dropbox_access_token: str | None = None      # or a refresh-token flow later
     dropbox_root: str = "/Island Junk TEST"      # never the live photo tree until go-live
 
+    # ── SendGrid (owner-2FA email codes — a second, recovery delivery channel to SMS) ──
+    # Secrets in .env / Render (git-ignored); absent → the email channel is unavailable and
+    # owner 2FA falls back to SMS only. from-email MUST be a SendGrid-verified single sender.
+    sendgrid_api_key: str | None = None
+    sendgrid_from_email: str | None = None
+    sendgrid_from_name: str = "Island Junk"
+
     @property
     def is_db_configured(self) -> bool:
         return bool(self.database_url)
@@ -106,6 +113,11 @@ class Settings(BaseSettings):
     @property
     def is_dropbox_configured(self) -> bool:
         return bool(self.dropbox_access_token)
+
+    @property
+    def is_email_configured(self) -> bool:
+        """True when the app can send transactional email (SendGrid key + a verified sender)."""
+        return bool(self.sendgrid_api_key and self.sendgrid_from_email)
 
 
 settings = Settings()

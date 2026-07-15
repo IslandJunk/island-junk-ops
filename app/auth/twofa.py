@@ -56,6 +56,33 @@ def set_owner_phone(db: DbSession, number: str) -> None:
     db.commit()
 
 
+def owner_email(db: DbSession) -> str | None:
+    sec = _owner_security(db)
+    if sec and sec.emails:
+        return (sec.emails[0] or {}).get("address") or None
+    return None
+
+
+def mask_email(address: str | None) -> str | None:
+    """Mask for display: wesroberts@hotmail.ca -> w***@hotmail.ca (domain kept so the owner
+    recognises which inbox, local part hidden)."""
+    if not address or "@" not in address:
+        return None
+    name, _, domain = address.partition("@")
+    head = (name[0] + "***") if name else "***"
+    return head + "@" + domain
+
+
+def set_owner_email(db: DbSession, address: str) -> None:
+    """Store/replace the owner's 2FA recovery email. Creates the OwnerSecurity row if missing."""
+    sec = _owner_security(db)
+    if sec is None:
+        sec = OwnerSecurity(password_hash="", phones=[], backup_codes=[], audit_log=[], emails=[])
+        db.add(sec)
+    sec.emails = [{"id": "primary", "label": "email", "address": address.strip()}]
+    db.commit()
+
+
 def issue_code(db: DbSession, sess: AuthSession) -> str:
     """Generate a fresh 6-digit code, store its hash + expiry on the session, return the plaintext
     (for the caller to text). Replaces any prior pending code."""

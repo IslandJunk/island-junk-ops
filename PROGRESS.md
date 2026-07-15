@@ -1,5 +1,27 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (Owner 2FA — EMAIL channel added; dormant until SendGrid is set)** — Built a second 2FA delivery
+channel so email can be the owner's phone-loss recovery path (Wes chose email over backup codes; recovery address
+= wesroberts@hotmail.ca, to be stored via the gate's "Add a recovery email" once the channel is live). The 2FA
+engine was already channel-agnostic (`issue_code`/`verify_code` don't care about delivery), so this is a delivery
+add-on, not a crypto change:
+- **New/changed:** `app/integrations/email_send.py` (SendGrid v3 via lazy `httpx`, creds-gated → `EmailNotConfigured`
+  when absent, never a silent "sent"); `owner_security.emails` JSONB column (**migration `b8e4f2a1c9d3`, new head**) +
+  `owner_email`/`set_owner_email`/`mask_email` in `app/auth/twofa.py`; owner-only `POST /auth/2fa/set-email`;
+  `POST /auth/2fa/request` now takes `{channel:"sms"|"email"}` (SMS default, opt-out bypass unchanged);
+  `GET /auth/2fa/status` adds `email_set`/`email_masked`/`email_channel_ready`. Gate UI (`owner-hub-bridge.js`) gains
+  "Phone unavailable? Email me a code" / "Add a recovery email" — but these render ONLY when `email_channel_ready`
+  (SendGrid configured), so the SMS gate is byte-for-byte unchanged until then.
+- **Config:** `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` (+ optional `SENDGRID_FROM_NAME`) in `app/core/config.py`;
+  `settings.is_email_configured`. NOT set yet → email channel dormant; SMS 2FA fully live + unaffected.
+- **Verified:** app imports clean; alembic head linear (`b8e4f2a1c9d3`); gate JS loads with **zero console errors**
+  and degrades gracefully. The only gap was the DB column (browser test hit exactly `owner_security.emails does not
+  exist`). Migration applies on Render deploy via `preDeployCommand` (migrate-then-serve; a failed migration aborts
+  the deploy, so no lockout window). Full endpoint + live-email test pending SendGrid creds.
+- **TO ACTIVATE (Wes, when ready):** create a SendGrid account → verify a single sender → set `SENDGRID_API_KEY` +
+  `SENDGRID_FROM_EMAIL` in Render → the gate's email options appear → add wesroberts@hotmail.ca as the recovery email
+  → live test (request an email code → verify). Then email is the phone-loss recovery path; no backup codes needed.
+
 **2026-07-14 (SECURITY — public-repo PIN exposure CLOSED)** — Confirmed the GitHub repo `IslandJunk/island-junk-ops`
 is **public** (`"visibility":"public"`) and the owner+manager PINs were hardcoded in the *current* `scripts/seed_owner.py`
 (not just git history). **Rotated the owner + manager PINs in the live prod DB** (Wes chose the new values; NOT stored in

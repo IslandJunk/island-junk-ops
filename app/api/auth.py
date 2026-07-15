@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.api.deps import COOKIE_NAME, get_current_employee, make_cookie
 from app.auth import service, twofa
 from app.auth.guards import is_owner
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.employee import Employee
 from app.models.enums import Brand
@@ -102,8 +103,11 @@ def twofa_status(request: Request, db: DbSession = Depends(get_db),
                  emp: Employee = Depends(get_current_employee)) -> dict:
     sess = _owner_session(request, emp)
     phone = twofa.owner_phone(db)
-    return {"verified": bool(sess.owner_2fa_verified), "phone_set": bool(phone),
-            "phone_masked": twofa.mask_phone(phone)}
+    email = twofa.owner_email(db)
+    return {"verified": bool(sess.owner_2fa_verified),
+            "phone_set": bool(phone), "phone_masked": twofa.mask_phone(phone),
+            "email_set": bool(email), "email_masked": twofa.mask_email(email),
+            "email_channel_ready": settings.is_email_configured}
 
 
 class PhoneIn(BaseModel):
@@ -122,12 +126,59 @@ def twofa_set_phone(body: PhoneIn, request: Request, db: DbSession = Depends(get
     return {"phone_masked": twofa.mask_phone(body.number)}
 
 
+class EmailIn(BaseModel):
+    address: str
+
+
+@router.post("/2fa/set-email")
+def twofa_set_email(body: EmailIn, request: Request, db: DbSession = Depends(get_db),
+                    emp: Employee = Depends(get_current_employee)) -> dict:
+    """Store the owner's recovery email — the 2FA code can be sent here as an alternative to
+    SMS (e.g. if the phone is lost/unavailable). Owner-only."""
+    _owner_session(request, emp)
+    addr = (body.address or "").strip()
+    domain = addr.split("@")[-1] if "@" in addr else ""
+    if "@" not in addr or "." not in domain or len(addr) < 5:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Enter a valid email address")
+    twofa.set_owner_email(db, addr)
+    return {"email_masked": twofa.mask_email(addr)}
+
+
+class RequestIn(BaseModel):
+    channel: str = "sms"   # "sms" (default) | "email"
+
+
 @router.post("/2fa/request")
 def twofa_request(request: Request, db: DbSession = Depends(get_db),
-                  emp: Employee = Depends(get_current_employee)) -> dict:
-    """Text a fresh 6-digit code to the owner's phone (from the send-only updates line, opt-out
-    bypassed since it's a security code). The code is stored hashed with a 10-minute expiry."""
+                  emp: Employee = Depends(get_current_employee),
+                  body: RequestIn | None = None) -> dict:
+    """Send a fresh 6-digit code to the owner — by SMS (default, from the send-only updates
+    line, opt-out bypassed since it's a security code) or by EMAIL (recovery channel, e.g. if
+    the phone is lost). The code is stored hashed with a 10-minute expiry; verification
+    (/2fa/verify) is identical for both channels."""
     sess = _owner_session(request, emp)
+    channel = (body.channel if body else "sms") or "sms"
+
+    if channel == "email":
+        email = twofa.owner_email(db)
+        if not email:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Add a recovery email first")
+        if not settings.is_email_configured:
+            # Bail BEFORE issuing a code so any code already texted stays valid.
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                                "Email isn't set up yet - use your texted code.")
+        code = twofa.issue_code(db, sess)
+        text = (f"Your Island Junk owner sign-in code is {code} (valid 10 minutes).\n\n"
+                f"If you didn't try to sign in, you can ignore this email.")
+        try:
+            from app.integrations.email_send import send_email
+            send_email(email, "Island Junk owner login code", text)
+        except Exception:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                "Couldn't send the email code - try again, or use SMS.")
+        return {"sent": True, "channel": "email", "to_masked": twofa.mask_email(email)}
+
+    # Default channel: SMS.
     phone = twofa.owner_phone(db)
     if not phone:
         raise HTTPException(status.HTTP_409_CONFLICT, "Add your phone first")
@@ -137,8 +188,8 @@ def twofa_request(request: Request, db: DbSession = Depends(get_db),
         from app.sms import service as sms_service
         sms_service.send(db, brand=None, to=phone, body=text, kind="owner_2fa", respect_opt_out=False)
     except Exception:
-        pass  # code is stored; delivery is best-effort (owner can retry or use a backup code)
-    return {"sent": True, "to_masked": twofa.mask_phone(phone)}
+        pass  # code is stored; delivery is best-effort (owner can retry or switch channel)
+    return {"sent": True, "channel": "sms", "to_masked": twofa.mask_phone(phone)}
 
 
 class CodeIn(BaseModel):

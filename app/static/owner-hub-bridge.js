@@ -7,6 +7,7 @@
 (function () {
   var gate = document.getElementById("gate");
   if (!gate) return;
+  var ST = {};   // last /2fa/status snapshot (phone/email set + email_channel_ready)
   function post(u, b) {
     return fetch(u, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
       body: b ? JSON.stringify(b) : undefined }).then(function (r) {
@@ -36,12 +37,22 @@
       this.disabled = true; this.textContent = "Saving..."; post("/auth/2fa/set-phone", { number: n }).then(function () { requestCode(); });
     };
   }
-  function codeEntry(masked) {
+  function codeEntry(masked, channel) {
+    channel = channel || "sms";
+    // Email affordances appear ONLY once SendGrid is live (email_channel_ready); until then
+    // the gate is SMS-only, exactly as before.
+    var extra = "";
+    if (ST.email_channel_ready) {
+      extra = ST.email_set
+        ? '<div><button id="tfe" style="' + LK + '">Phone unavailable? Email me a code</button></div>'
+        : '<div><button id="tfae" style="' + LK + '">Add a recovery email</button></div>';
+    }
     shell('<input id="tfc" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" style="' + IN + ';letter-spacing:5px;text-align:center">'
       + '<button id="tfv" style="' + BT + '">Verify</button>'
-      + '<div><button id="tfr" style="' + LK + '">Text a new code</button></div>'
-      + '<div><button id="tfb" style="' + LK + '">Locked out? Enter a backup code above</button></div>');
-    msg("Enter the 6-digit code texted to " + (masked || "your phone") + ".");
+      + '<div><button id="tfr" style="' + LK + '">Send a new code by text</button></div>'
+      + extra);
+    var where = channel === "email" ? (masked || "your email") : (masked || "your phone");
+    msg("Enter the 6-digit code sent to " + where + ".");
     var v = document.getElementById("tfv");
     function go() {
       var c = document.getElementById("tfc").value.trim(); if (!c) return;
@@ -53,22 +64,55 @@
     }
     v.onclick = go;
     document.getElementById("tfc").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
-    document.getElementById("tfr").onclick = function () { requestCode(); };
-    document.getElementById("tfb").onclick = function () {
-      var i = document.getElementById("tfc"); i.placeholder = "backup code"; i.focus(); msg("Enter a backup code, then Verify.");
-    };
+    document.getElementById("tfr").onclick = function () { requestCode("sms"); };
+    var eBtn = document.getElementById("tfe"); if (eBtn) eBtn.onclick = function () { requestCode("email"); };
+    var aeBtn = document.getElementById("tfae"); if (aeBtn) aeBtn.onclick = function () { setEmail(); };
   }
-  function requestCode() {
-    shell('<div style="color:#777;margin-top:16px">Texting your code...</div>');
-    post("/auth/2fa/request").then(function (res) {
-      if (res.status === 409) { setPhone(); return; }
-      codeEntry(res.j && res.j.to_masked);
-    }).catch(function () { codeEntry(null); });
+  function requestCode(channel) {
+    channel = channel || "sms";
+    shell('<div style="color:#777;margin-top:16px">' + (channel === "email" ? "Emailing" : "Texting") + ' your code...</div>');
+    post("/auth/2fa/request", { channel: channel }).then(function (res) {
+      if (res.status === 409) {                 // destination not set yet
+        if (channel === "email") { setEmail(); } else { setPhone(); }
+        return;
+      }
+      if (!res.ok) {                            // email not set up (503) / send failed (502)
+        codeEntry(ST.phone_masked, "sms");
+        msg((res.j && res.j.detail) || "Couldn't send a code - try again.", "#C0392B");
+        return;
+      }
+      codeEntry(res.j && res.j.to_masked, (res.j && res.j.channel) || channel);
+    }).catch(function () { codeEntry(ST.phone_masked, "sms"); });
+  }
+  function setEmail() {
+    shell('<input id="tfem" type="email" inputmode="email" placeholder="you@example.com" style="' + IN + '">'
+      + '<button id="tfes" style="' + BT + '">Save recovery email</button>'
+      + '<div><button id="tfbk" style="' + LK + '">Back to code entry</button></div>');
+    msg("Add an email that can receive your sign-in code if your phone isn't handy.");
+    document.getElementById("tfes").onclick = function () {
+      var a = document.getElementById("tfem").value.trim();
+      if (a.indexOf("@") < 1 || a.indexOf(".", a.indexOf("@")) < 0) { msg("Enter a valid email address", "#C0392B"); return; }
+      this.disabled = true; this.textContent = "Saving...";
+      post("/auth/2fa/set-email", { address: a }).then(function (res) {
+        if (res.ok) {
+          ST.email_set = true; ST.email_masked = res.j && res.j.email_masked;
+          if (ST.phone_set) { codeEntry(ST.phone_masked, "sms"); msg("Recovery email saved. Enter your texted code, or use 'Email me a code'."); }
+          else { setPhone(); }
+        } else {
+          var b = document.getElementById("tfes"); if (b) { b.disabled = false; b.textContent = "Save recovery email"; }
+          msg((res.j && res.j.detail) || "Couldn't save that email - try again.", "#C0392B");
+        }
+      });
+    };
+    document.getElementById("tfbk").onclick = function () {
+      if (ST.phone_set) { codeEntry(ST.phone_masked, "sms"); } else { setPhone(); }
+    };
   }
   fetch("/auth/2fa/status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
     if (!st) return;                       // not owner / not signed in -> leave the prototype gate alone
+    ST = st;
     if (st.verified) { reveal(); return; }
-    if (st.phone_set) { requestCode(); } else { setPhone(); }
+    if (st.phone_set) { requestCode("sms"); } else { setPhone(); }
   }).catch(function () {});
 })();
 
