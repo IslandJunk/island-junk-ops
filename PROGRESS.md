@@ -1,5 +1,33 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (RESUME POINT — Owner SMS 2FA COMPLETE + live-tested; WS4 fully live)** — Wes verified real owner 2FA
+end-to-end on production (set his cell → real texted code → Verify → hub unlocked). Everything below is DONE, deployed,
+and confirmed working on the REAL books. Migration head **`206c2604ac57`**; latest commit **`641037f`**.
+- **Owner SMS 2FA — DONE + LIVE.** Gate: `app/static/owner-hub-bridge.js` prepends a real SMS gate that replaces the
+  prototype's *simulated* password/code gate (on load: verified session → reveal hub; else set cell first-time → text
+  a 6-digit code → verify → reveal). Backend: `app/auth/twofa.py` (HMAC-hashed codes keyed by the session secret,
+  10-min expiry, single-use backup codes), `Session.owner_2fa_verified`+`twofa_code_hash`+`twofa_expires_at` (migration
+  `206c2604ac57`), owner-only `/auth/2fa/status|set-phone|request|verify` (code from the updates line,
+  `respect_opt_out=False`). Enforcement: `require_owner_2fa` (deps) on **`/square/charge-card-on-file`** +
+  **`/quickbooks/connect` + `/disconnect`** (reads — status/sync/invoice-queue/reminders — stay owner-only so the hub
+  loads behind the gate; the auto-sync scheduler is a trusted background job, unaffected). Crew keep fast PIN login.
+  Commits `041f107` (backend) + `641037f` (gate+enforcement). **Wes's 2FA cell is now set** in `owner_security.phones`.
+- **WS4 QuickBooks — LIVE on the real Victoria company** ("Island Junk Solutions Ltd", realm `193514598077864`),
+  read-only, tokens Fernet-encrypted (`gAAAAA…`, prod `QBO_TOKEN_KEY`). **In-app auto-sync** = `app/quickbooks/scheduler.py`
+  (15-min lifespan loop; Owner-Hub Auto-sync toggle per brand; no separate cron). Twilio + Square also live.
+- **ACCESS / RECOVERY (important for the next session):** local `.env` `DATABASE_URL` points at the **Render PRODUCTION
+  DB** — so all DB checks/fixes are run from local (`.venv/Scripts/python.exe`). Local `.env` = SANDBOX QBO creds +
+  sandbox `QBO_TOKEN_KEY`; Render dashboard = PRODUCTION QBO creds + prod `QBO_TOKEN_KEY` (never in git). Prod:
+  `island-junk-ops.onrender.com`. Owner login = **Wes** (owner PIN not stored in this handoff). **If ever locked out of the Owner Hub:** clear
+  `auth_session.owner_2fa_verified` isn't needed — instead set a session's flag true, or fix `owner_security.phones`,
+  directly in the DB.
+- **OPEN FOLLOW-UPS (all optional, none blocking):** (1) rotate the SANDBOX client secret (chat-exposed; the PRODUCTION
+  secret Wes typed straight into Render, so it's safe); (2) add a "generate backup codes" flow for 2FA (owner has none —
+  phone-loss recovery is DB-only today); (3) extend `require_owner_2fa` to more owner endpoints if wanted (sync / toggle
+  / reads); (4) optional `intuit_tid` logging on QBO errors; (5) connect Nanaimo's QB company ("Island Junk Solutions
+  Nanaimo Ltd.") from the Nanaimo workspace when it's set up. **Day-to-day QB use:** put the `BIN-####` from the owner
+  Ready-to-invoice list on the real QuickBooks invoice (Message field) → tap "Sync QuickBooks now" (or flip Auto-sync ON).
+
 **2026-07-14 (WS4 auto-sync live + owner SMS-2FA backend)** —
 - **In-app auto-sync SHIPPED** (commit `9ccb854`): `app/quickbooks/scheduler.py` — a background loop started from the
   FastAPI lifespan runs `poll_all` every 15 min for brands with the Owner-Hub auto-sync toggle ON (no-op when OFF).
@@ -159,8 +187,7 @@ editing, the rest of field/dispatch + operational-tail persistence, and all thre
 and per-screen **bridges** (appended before `</body>`) swap `localStorage` writes for API calls. Deploy target: **Render**.
 
 **Repo state:** clean tree, HEAD `618fe77`, Alembic head **`cdecca6a35e4`** (19 migrations; they live under
-`migrations/versions/`, NOT `alembic/versions/`). 12 routers, 34 synced keys. Login: **Manager / PIN 1111** or
-**Wes (owner) / PIN 4321**. Preview server: `.claude/launch.json` (name `api`) runs plain uvicorn with **no `--reload`** →
+`migrations/versions/`, NOT `alembic/versions/`). 12 routers, 34 synced keys. Login: **Manager** or **Wes (owner)** (PINs not stored in this doc). Preview server: `.claude/launch.json` (name `api`) runs plain uvicorn with **no `--reload`** →
 restart it after any Python edit. Owner Hub has a *second* gate (owner password + sim 2FA) — the prototype's own demo;
 call `unlock()` to skip in browser tests.
 
@@ -362,7 +389,7 @@ Three isolated writable targets, each guard refuses the other two + the live IDs
 .venv/Scripts/python.exe -m uvicorn app.main:app                     # http://127.0.0.1:8000/app · /health
 ```
 
-Login: **Manager / 1111** or **Wes (owner) / 4321**. In browser tests the owner-hub's second gate is skippable via
+Login: **Manager** or **Wes (owner)** (PINs not stored in this doc). In browser tests the owner-hub's second gate is skippable via
 `unlock()`; prefer the API for auth (`POST /auth/login {pin, brand}` sets the cookie). Preview server: `preview_start`
 (name `api`) — restart it after any Python edit (no `--reload`).
 
