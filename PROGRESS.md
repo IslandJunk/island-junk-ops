@@ -1,5 +1,42 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (WS4 auto-sync live + owner SMS-2FA backend)** —
+- **In-app auto-sync SHIPPED** (commit `9ccb854`): `app/quickbooks/scheduler.py` — a background loop started from the
+  FastAPI lifespan runs `poll_all` every 15 min for brands with the Owner-Hub auto-sync toggle ON (no-op when OFF).
+  Replaced the `render.yaml` cron (no separate service to configure — the web service already has the QBO creds/key).
+  Prod healthy after deploy. **Sync test on the REAL books passed**: owner-login API → `POST /quickbooks/sync` scanned
+  **102 real invoices**, 0 BIN matches, read-only, no errors.
+- **Owner SMS 2FA — BACKEND done + tested** (migration `206c2604ac57`). Wes chose SMS (crew keep fast PIN login;
+  2FA is owner-only). `Session.owner_2fa_verified` + `twofa_code_hash`/`twofa_expires_at`; `app/auth/twofa.py`
+  (HMAC-hashed 6-digit codes keyed by the session secret, 10-min expiry, single-use backup codes); owner-only
+  `/auth/2fa/status|set-phone|request|verify` (code texted from the updates line, `respect_opt_out=False`). Tested:
+  right/wrong/expired code, backup-code single-use, owner-only (+ manager 403). **Deployed but DORMANT** — nothing
+  enforces or calls it yet, so no lockout risk.
+- **2FA STILL TO DO (activation — do WITH Wes's real phone so there's no lockout):** (a) owner-hub **GATE UI** —
+  replace the prototype's simulated `unlock()` gate: on load call `/auth/2fa/status`; if unverified, prompt set-phone
+  (owner phone is currently unset, `phones: []`) → text code → verify → reveal the hub; (b) **ENFORCE**
+  `require_owner_2fa` (is_owner + `session.owner_2fa_verified`) on the sensitive owner endpoints (QuickBooks router +
+  `/square/charge-card-on-file`). Recovery if ever locked out: clear the flag / phones directly in the DB (I have access).
+
+**2026-07-12 (WS4 LIVE in production — real Victoria QuickBooks connected)** — Deployed to Render (commits
+`7ec9ae3` WS4 + `5816fa8` legal pages) and Wes connected the **real Victoria company**: `qbo_connection`
+brand=victoria, realm **193514598077864**, company **"Island Junk Solutions Ltd"**, tokens **Fernet-encrypted
+at rest** (`gAAAAA…`, prod `QBO_TOKEN_KEY`), read-only, auto-sync OFF. Production env vars set on the Render web
+service (QBO_CLIENT_ID/SECRET production, QBO_ENVIRONMENT=production, QBO_REDIRECT_URI = onrender callback,
+QBO_TOKEN_KEY). Added public **`/legal/privacy` + `/legal/eula`** pages (served from the app) — Intuit's app
+profile requires public EULA + privacy URLs to unlock production keys; completed the App Assessment questionnaire.
+**Gotchas:** (a) a leftover SANDBOX connection in the shared DB showed as "connected" and masked the real connect
+— had to **Disconnect** first; (b) the onrender redirect URI must be added under the Intuit **Production** keys
+(Development ≠ Production); (c) Wes has TWO QB companies (Victoria = "Island Junk Solutions Ltd", Nanaimo =
+"Island Junk Solutions Nanaimo Ltd.") — Nanaimo connects later from its own workspace.
+**Day-to-day use:** put the `BIN-####` from the Ready-to-invoice queue on the real invoice → tap **"Sync
+QuickBooks now"** → 48h clock starts; paid → Sync → cleared. MANUAL for now — the auto-poll cron is in
+`render.yaml` but needs a **Render blueprint sync** + its own env vars + the Google Secret File to run hands-off.
+**Open follow-ups:** (1) **rotate the sandbox client secret** (chat-exposed; regenerate Development secret in
+Intuit + update local `.env`); (2) **real owner 2FA** — the owner-hub 2FA is still the prototype's *simulated*
+gate (server-side owner protection = PIN + owner-only checks, single factor); build real SMS-code 2FA (model
+already has phones + backup_codes); (3) optional: `intuit_tid` logging on QBO errors; deploy the auto-poll cron.
+
 **2026-07-12 (WS4 security review DONE + auto-poll shipped)** — Full WS4 built, sandbox-proven end-to-end, and reviewed.
 - **Security review** of `app/api/quickbooks.py`, `app/quickbooks/*`, `app/integrations/qbo.py`. **Fixed:** (1) reflected XSS —
   the `/quickbooks/callback` page echoed the Intuit `?error` param (+ company name + exception) into HTML unescaped, and the

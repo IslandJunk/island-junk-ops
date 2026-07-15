@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session as DbSession
 
 from app.api.deps import COOKIE_NAME, get_current_employee, make_cookie
-from app.auth import service
+from app.auth import service, twofa
 from app.auth.guards import is_owner
 from app.db.session import get_db
 from app.models.employee import Employee
@@ -83,3 +83,74 @@ def set_active_brand(body: BrandIn, request: Request, db: DbSession = Depends(ge
     sess.active_brand = body.brand
     db.commit()
     return _to_out(emp, sess.active_brand)
+
+
+# ── Owner SMS 2FA (real second factor for the owner account) ──────────────────
+def _owner_session(request: Request, emp: Employee):
+    """Owner + an active session — the gate for the 2FA setup/verify endpoints, which must be
+    reachable BEFORE the second factor is verified. Sensitive endpoints use require_owner_2fa."""
+    if not is_owner(emp):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner only")
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No active session")
+    return sess
+
+
+@router.get("/2fa/status")
+def twofa_status(request: Request, db: DbSession = Depends(get_db),
+                 emp: Employee = Depends(get_current_employee)) -> dict:
+    sess = _owner_session(request, emp)
+    phone = twofa.owner_phone(db)
+    return {"verified": bool(sess.owner_2fa_verified), "phone_set": bool(phone),
+            "phone_masked": twofa.mask_phone(phone)}
+
+
+class PhoneIn(BaseModel):
+    number: str
+
+
+@router.post("/2fa/set-phone")
+def twofa_set_phone(body: PhoneIn, request: Request, db: DbSession = Depends(get_db),
+                    emp: Employee = Depends(get_current_employee)) -> dict:
+    """First-time setup: store the owner's cell for the 2FA code. Owner-only."""
+    _owner_session(request, emp)
+    digits = "".join(ch for ch in (body.number or "") if ch.isdigit())
+    if len(digits) < 10:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Enter a valid phone number")
+    twofa.set_owner_phone(db, body.number)
+    return {"phone_masked": twofa.mask_phone(body.number)}
+
+
+@router.post("/2fa/request")
+def twofa_request(request: Request, db: DbSession = Depends(get_db),
+                  emp: Employee = Depends(get_current_employee)) -> dict:
+    """Text a fresh 6-digit code to the owner's phone (from the send-only updates line, opt-out
+    bypassed since it's a security code). The code is stored hashed with a 10-minute expiry."""
+    sess = _owner_session(request, emp)
+    phone = twofa.owner_phone(db)
+    if not phone:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Add your phone first")
+    code = twofa.issue_code(db, sess)
+    text = f"Island Junk owner login code: {code} (valid 10 min). Not you? Ignore this."
+    try:
+        from app.sms import service as sms_service
+        sms_service.send(db, brand=None, to=phone, body=text, kind="owner_2fa", respect_opt_out=False)
+    except Exception:
+        pass  # code is stored; delivery is best-effort (owner can retry or use a backup code)
+    return {"sent": True, "to_masked": twofa.mask_phone(phone)}
+
+
+class CodeIn(BaseModel):
+    code: str
+
+
+@router.post("/2fa/verify")
+def twofa_verify(body: CodeIn, request: Request, db: DbSession = Depends(get_db),
+                 emp: Employee = Depends(get_current_employee)) -> dict:
+    """Verify the texted code (or a backup code). On success the session is 2FA-verified and the
+    Owner Hub + sensitive owner actions unlock for that session."""
+    sess = _owner_session(request, emp)
+    if not twofa.verify_code(db, sess, body.code):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired code")
+    return {"verified": True}
