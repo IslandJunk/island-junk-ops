@@ -57,33 +57,7 @@ services:
         sync: false
     # The Google service-account JSON is a git-ignored FILE, not an env var — add it as a
     # Render Secret File mounted at spike/service-account-key.json (see DEPLOY.md §4).
-
-  # ── QuickBooks auto-poll (WS4) — read-only sync on a schedule for auto-sync-enabled brands. ──
-  # No-op unless an owner flipped the Owner-Hub auto-sync toggle ON. Needs the SAME QBO creds and
-  # the Google Secret File (for the reminder-calendar mirror) as the web service — Render Secret
-  # Files are per-service, so upload service_account_key.json to THIS service too at deploy.
-  - type: cron
-    name: qbo-poll
-    runtime: python
-    plan: starter
-    branch: main
-    schedule: "*/15 * * * *"           # every 15 min; read-only + cheap
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m scripts.qbo_poll
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.13"
-      - key: ENVIRONMENT
-        value: production
-      - key: GOOGLE_SERVICE_ACCOUNT_FILE
-        value: /etc/secrets/service_account_key.json
-      - key: DATABASE_URL
-        sync: false
-      - key: QBO_CLIENT_ID
-        sync: false
-      - key: QBO_CLIENT_SECRET
-        sync: false
-      - key: QBO_ENVIRONMENT
-        sync: false
-      - key: QBO_TOKEN_KEY             # same Fernet key as the web service — the cron decrypts tokens too
-        sync: false
+    #
+    # Auto-sync runs IN-APP (app/quickbooks/scheduler.py): a background loop in THIS web service
+    # polls every 15 min for brands whose Owner-Hub auto-sync toggle is ON. No separate cron
+    # service to configure — the web service already has the QBO creds + token key.

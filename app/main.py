@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -29,7 +30,26 @@ from app.db.session import get_db
 from app.models.enums import Brand
 from app.web.refs import reference_bootstrap_script
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Start the QBO auto-sync background loop. Best-effort: a scheduler hiccup never blocks the
+    web app from serving, and the loop sleeps before its first run + swallows its own errors."""
+    import asyncio
+    task = None
+    try:
+        from app.quickbooks.scheduler import qbo_poll_loop
+        task = asyncio.create_task(qbo_poll_loop())
+    except Exception:
+        task = None
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+
+
+app = FastAPI(title=settings.app_name, lifespan=_lifespan)
 app.include_router(auth_router)
 app.include_router(booking_router)
 app.include_router(customers_router)
