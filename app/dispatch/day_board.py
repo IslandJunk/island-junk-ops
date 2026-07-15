@@ -42,6 +42,7 @@ def _job_view(ev: dict, colour: ColourMap | None, job: Job | None) -> dict:
         "account_type": (job.account_type.value if (job and job.account_type) else None),
         "booking_lane": (job.booking_lane.value if job else None),
         "scope": (job.scope if job else None),
+        "job_id": (str(job.id) if job else None),   # crew fetch reference photos by this
     }
 
 

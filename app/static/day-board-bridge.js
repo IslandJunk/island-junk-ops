@@ -36,6 +36,7 @@
           bin: j.booking_lane === "bins" || undefined,
           status: "scheduled",
           office: j.scope || "",
+          job_id: j.job_id || null,        // linked Job — the crew fetch reference photos by this
         });
       });
     });
@@ -152,12 +153,52 @@
     wrap.appendChild(btn);
     ow.parentNode.insertBefore(wrap, ow.nextSibling);
   }
+  // Reference photos (§8): the manager attaches the customer's photos at booking; the crew see
+  // them right on the job here. Fetched per linked Job and shown as a tap-to-enlarge strip above
+  // the "on our way" button. Silent when a stop has no linked Job or no photos.
+  function openPhoto(url) {
+    var ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.onclick = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    var im = document.createElement("img");
+    im.src = url;
+    im.style.cssText = "max-width:100%;max-height:100%;border-radius:8px";
+    ov.appendChild(im); document.body.appendChild(ov);
+  }
+  function injectPhotos() {
+    var cur = (typeof CURRENT !== "undefined") ? CURRENT : null;
+    var ow = document.getElementById("owBtn");
+    if (!cur || !cur.job_id || !ow || document.getElementById("ijPhotoWrap")) return;
+    var wrap = document.createElement("div");
+    wrap.id = "ijPhotoWrap"; wrap.style.cssText = "margin:4px 0 12px";
+    ow.parentNode.insertBefore(wrap, ow);   // above the "on our way" button
+    fetch("/jobs/" + encodeURIComponent(cur.job_id) + "/photos", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (res) {
+        var photos = (res && res.photos) || [];
+        if (!photos.length) { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); return; }
+        var lbl = document.createElement("div");
+        lbl.textContent = "Reference photos (" + photos.length + ") - tap to enlarge";
+        lbl.style.cssText = "font-weight:700;font-size:13px;margin-bottom:6px;color:#141414";
+        var strip = document.createElement("div");
+        strip.style.cssText = "display:flex;gap:8px;overflow-x:auto;padding-bottom:4px";
+        photos.forEach(function (p) {
+          var im = document.createElement("img");
+          im.src = p.url; im.alt = p.filename || "photo"; im.loading = "lazy";
+          im.style.cssText = "height:96px;width:96px;object-fit:cover;border-radius:10px;border:1px solid #d8d3cc;flex:0 0 auto;cursor:pointer";
+          im.onclick = function () { openPhoto(p.url); };
+          strip.appendChild(im);
+        });
+        wrap.appendChild(lbl); wrap.appendChild(strip);
+      }).catch(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); });
+  }
   function wireNextEta() {
     if (typeof openStop !== "function") return;
     var _open = openStop;
     window.openStop = function () {
       var r = _open.apply(this, arguments);
       try { injectEta(); } catch (e) {}
+      try { injectPhotos(); } catch (e) {}
       return r;
     };
   }

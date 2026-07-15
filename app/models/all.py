@@ -21,6 +21,7 @@ from app.models import (  # noqa: F401
     field_job,
     incident,
     job,
+    job_photo,
     maintenance,
     ops,
     owner_security,

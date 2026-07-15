@@ -1,5 +1,30 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (Job reference photos — manager attaches, crew see on the Day Board; Dropbox NOT used)** —
+Started as "set up Dropbox photo filing," but talking through the real workflow we landed somewhere simpler
+and better. The crew's before/after photos **stay in Facebook Messenger** (fast, searchable by address —
+don't break a working flow). The actual gap was the **manager bringing the customer's reference photos into
+the job** so the crew see them (§8) — and that needs **no Dropbox at all**; the photos live in the app.
+- **NEW `job_photo` table** (migration **`c4d9e1a2b3f5`, new head**) — image bytes stored in-app, compressed
+  **client-side** (canvas downscale to 1600px / JPEG 0.7) so rows stay small. Router `app/api/job_photos.py`:
+  `POST /jobs/{id}/photos` (attach, any signed-in crew), `GET /jobs/{id}/photos` (list), `GET /job-photos/{id}`
+  (serve bytes), `DELETE /job-photos/{id}` (manager/owner). Brand-isolated (a crew member can't reach a
+  cross-brand job's photos, §15).
+- **Attach at booking:** `booking-bridge.js` — on a successful `/booking`, the manager's attached photos (the
+  "+ Add photo from phone" button -> the prototype's `mgrPhotos`) are compressed + uploaded onto the new job
+  (best-effort; the button shows "N/M photos filed").
+- **Crew view on the job:** `day-board-bridge.js` — each Day Board stop now carries `job_id` (added to
+  `app/dispatch/day_board.py::_job_view`); opening a stop shows a **"Reference photos"** strip (tap to enlarge)
+  above the on-our-way button. Silent when a stop has no linked job or no photos.
+- **Decisions:** photos in Postgres (`bytea`) — fine for the low volume (manager reference shots, NOT the crew
+  stream); move to object storage if it ever grows. **No Dropbox app / OAuth needed** (saved Wes that setup).
+  The existing `app/integrations/dropbox_files.py` + `/dropbox/job-photo` stay built-but-unused (dry-run).
+- **Verified** locally (prod DB): backend imports; migration linear (`c4d9e1a2b3f5`); booking + day-board
+  bridges parse clean; `openStop` wrapped so the photo strip injects on stop-open. Full store->display
+  end-to-end verifies **live** (needs the migration, which Render applies on deploy). NOTE: the **Truck Hub is
+  a launcher with no job data** (`bridge: None`) — the crew's real per-job view is the **Day Board stop detail**,
+  so photos live there.
+
 **2026-07-14 (Email 2FA ACTIVATED + in-hub Security panel + QuickBooks tidy)** —
 - **Email 2FA is LIVE + activated.** Wes set up SendGrid (verified single sender `wes@islandjunk.com`, Mail-Send-only
   API key; `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` set in Render), added `wesroberts@hotmail.ca` as the recovery

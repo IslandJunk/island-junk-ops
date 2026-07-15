@@ -148,6 +148,46 @@
     };
   }
 
+  // Compress a booking photo (an object-URL from the prototype's mgrPhotos) to a small JPEG
+  // data-URL, then file it onto the job so the crew see it on the Day Board (§8). The phone-side
+  // downscale keeps the stored bytes small.
+  function compressToDataUrl(srcUrl) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var maxDim = 1600, w = img.width || 1, h = img.height || 1;
+        var scale = Math.min(1, maxDim / Math.max(w, h));
+        var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+        var c = document.createElement("canvas"); c.width = cw; c.height = ch;
+        c.getContext("2d").drawImage(img, 0, 0, cw, ch);
+        try { resolve(c.toDataURL("image/jpeg", 0.7)); } catch (e) { reject(e); }
+      };
+      img.onerror = reject;
+      img.src = srcUrl;
+    });
+  }
+  function uploadBookingPhotos(jobId, btn) {
+    if (!jobId) return;
+    var photos = [];
+    try { photos = mgrPhotos || []; } catch (e) { photos = []; }   // prototype global (shared scope)
+    if (!photos.length) return;
+    var total = photos.length, done = 0, ok = 0;
+    btn.textContent = "Filing " + total + " photo" + (total > 1 ? "s" : "") + "…";
+    photos.forEach(function (p, i) {
+      compressToDataUrl(p.url).then(function (dataUrl) {
+        return fetch("/jobs/" + encodeURIComponent(jobId) + "/photos", {
+          method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: p.name || ("photo" + (i + 1) + ".jpg"), data_url: dataUrl }),
+        });
+      }).then(function (r) { if (r && r.ok) ok++; }).catch(function () {}).then(function () {
+        done++;
+        if (done === total) {
+          btn.textContent = "✓ Booked — " + ok + "/" + total + " photo" + (total > 1 ? "s" : "") + " filed to the job";
+        }
+      });
+    });
+  }
+
   function addBookBtn() {
     var modal = document.querySelector("#ovl .modal");
     if (!modal || modal.querySelector("#ijBookBtn")) return;
@@ -168,6 +208,7 @@
       }).then(function (j) {
         btn.textContent = "✓ Booked (" + lane() + ") — event " + (j.gcal_event_id || "?") + " on TEST";
         btn.style.background = "#3CA03C";
+        uploadBookingPhotos(j && j.id, btn);   // best-effort: file the attached photos onto the job
       }).catch(function (e) {
         btn.disabled = false;
         btn.textContent = (e && e.message === "auth") ? "Log in as a manager first" : "Error — retry";

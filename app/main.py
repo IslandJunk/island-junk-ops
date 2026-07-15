@@ -18,6 +18,7 @@ from app.api.day_board import router as day_board_router
 from app.api.disposal import router as disposal_router
 from app.api.integrations import router as integrations_router
 from app.api.invoicing import router as invoicing_router
+from app.api.job_photos import router as job_photos_router
 from app.api.quickbooks import router as quickbooks_router
 from app.api.reminders import router as reminders_router
 from app.api.reviews import router as reviews_router
@@ -57,6 +58,7 @@ app.include_router(day_board_router)
 app.include_router(disposal_router)
 app.include_router(integrations_router)
 app.include_router(invoicing_router)
+app.include_router(job_photos_router)
 app.include_router(quickbooks_router)
 app.include_router(reminders_router)
 app.include_router(reviews_router)
