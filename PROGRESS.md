@@ -1,5 +1,14 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (SECURITY — public-repo PIN exposure CLOSED)** — Confirmed the GitHub repo `IslandJunk/island-junk-ops`
+is **public** (`"visibility":"public"`) and the owner+manager PINs were hardcoded in the *current* `scripts/seed_owner.py`
+(not just git history). **Rotated the owner + manager PINs in the live prod DB** (Wes chose the new values; NOT stored in
+this doc) → the published `4321`/`1111` no longer authenticate; verified new-works + old-dead. **Scrubbed `seed_owner.py`**
+to env-driven `0000` placeholders (`SEED_OWNER_PIN` / `SEED_MANAGER_PIN` / `SEED_OWNER_PASSWORD`); the owner-hub password
+`owner` was already dead code (2FA is the real gate) but was scrubbed too. Crew stay `0000` until Wes assigns real per-person
+PINs from the Owner Hub at go-live. Old history values are now inert (PINs changed) — **no history rewrite needed**. The
+seed-script edit is uncommitted on `main` pending Wes's OK to push.
+
 **2026-07-14 (RESUME POINT — Owner SMS 2FA COMPLETE + live-tested; WS4 fully live)** — Wes verified real owner 2FA
 end-to-end on production (set his cell → real texted code → Verify → hub unlocked). Everything below is DONE, deployed,
 and confirmed working on the REAL books. Migration head **`206c2604ac57`**; latest commit **`641037f`**.
@@ -25,11 +34,10 @@ and confirmed working on the REAL books. Migration head **`206c2604ac57`**; late
   secret Wes typed straight into Render, so it's safe); (2) add a "generate backup codes" flow for 2FA (owner has none —
   phone-loss recovery is DB-only today); (3) extend `require_owner_2fa` to more owner endpoints if wanted (sync / toggle
   / reads); (4) optional `intuit_tid` logging on QBO errors; (5) connect Nanaimo's QB company ("Island Junk Solutions
-  Nanaimo Ltd.") from the Nanaimo workspace when it's set up; (6) **SECURITY (do soon):** the owner + manager login
-  PINs were the seeded defaults and had been committed in this handoff doc — now scrubbed from the current file, but
-  still present in git HISTORY. **Change the owner PIN** (and manager/crew PINs), and confirm whether the GitHub repo
-  `IslandJunk/island-junk-ops` is **public** (couldn't auto-check — `gh` isn't installed); if public, rotating the PIN
-  is important. **Day-to-day QB use:** put the `BIN-####` from the owner
+  Nanaimo Ltd.") from the Nanaimo workspace when it's set up; (6) ~~**SECURITY (do soon):** rotate the exposed PINs~~ —
+  **DONE 2026-07-14** (see the security entry at the top of this file): repo confirmed **public**, owner+manager PINs
+  rotated in the live prod DB, `seed_owner.py` scrubbed to placeholders; crew `0000` until owner-set at go-live.
+  **Day-to-day QB use:** put the `BIN-####` from the owner
   Ready-to-invoice list on the real QuickBooks invoice (Message field) → tap "Sync QuickBooks now" (or flip Auto-sync ON).
 
 **2026-07-14 (WS4 auto-sync live + owner SMS-2FA backend)** —
