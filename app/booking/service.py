@@ -85,6 +85,9 @@ def _description(job: Job) -> str:
         lines.append(f"Est: ${job.est_price}")
     if job.crew:
         lines.append(f"Crew: {', '.join(job.crew)}")
+    link = ((job.details or {}).get("dropbox") or {}).get("link")
+    if link:
+        lines.append(f"Photos: {link}")   # search the job in Calendar -> click -> the job's folder
     lines.append(f"[app job {job.id}]")
     return "\n".join(lines)
 
@@ -111,6 +114,11 @@ def create_booking(
     )
     db.add(job)
     db.flush()  # assign job.id for the description
+    try:   # Dropbox per-job folder + shared link — best-effort, dry-run/no-op until connected
+        from app.integrations import dropbox_files
+        dropbox_files.ensure_job_folder(db, job, on_date)
+    except Exception:
+        pass   # Dropbox is a nicety — a failure here never fails the booking
     if write_calendar:
         job.gcal_event_id = gcal.create_event(
             summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,

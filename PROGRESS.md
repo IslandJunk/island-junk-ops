@@ -1,5 +1,22 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-14 (Dropbox Phase 1b — per-job folder + calendar link at booking; built dry-run, repoint held)** —
+At booking the app now creates the job's Dropbox folder + a stable shared link and writes the link into the
+calendar event description (`Photos: <link>`), so searching the job in Calendar -> click -> the folder. Honors
+the write-only-at-booking guardrail (one event write; photos accumulate in the folder, NO per-photo edits).
+- `app/integrations/dropbox_files.py`: `job_folder_path` (`<root>/<brand>/<date customer short-id>`),
+  `create_folder` (idempotent, 409=exists), `ensure_shared_link` (create or fetch existing),
+  `ensure_job_folder(db, job, on_date)` (get_valid_access_token -> create folder + link -> stash {folder, link}
+  on `job.details['dropbox']` -> return link; **None/no-op when Dropbox isn't connected**). Wired into
+  `app/booking/service.py::create_booking` after the flush (best-effort try/except — never fails a booking);
+  `_description` appends the `Photos:` line when a link exists.
+- **CREDS-GATED + SAFE:** unconnected -> `ensure_job_folder` returns None before any API call, so booking is
+  byte-for-byte unchanged. Verified: imports; parse; `job_folder_path` output. The folder/link API calls
+  (`create_folder_v2`, `create_shared_link_with_settings`) are **untested until Wes connects** — test live then
+  (watch parent-folder auto-creation + the 409 'link exists' path).
+- **STILL HELD (Phase 1c):** repoint the photo STORE from Postgres `job_photo` to the Dropbox job folder —
+  deliberately NOT done yet, so today's working in-app photos don't break until Dropbox is proven connected.
+
 **2026-07-14 (Dropbox photo SYSTEM — Phase 1a: durable OAuth connect shipped)** — Wes refined the photo plan
 into a fuller system: Dropbox as the per-job store, with a **stable folder LINK dropped into the job's Google
 Calendar event AT BOOKING** (honors the "calendar write only at booking" guardrail — NO per-photo event
