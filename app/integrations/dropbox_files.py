@@ -81,11 +81,36 @@ def upload_job_photo(*, job_ref: str, filename: str, data_url: str) -> dict:
 
 # ── Per-job folder + shared link (Phase 1: created at booking, link rides into the calendar) ──
 
-def job_folder_path(brand_value: str, on_date_iso: str, customer: str | None, job_id: str) -> str:
-    """`<root>/<brand>/<date customer short-id>` — one findable folder per job."""
+def _town_from_address(address: str | None) -> str:
+    """Best-effort town/area pulled from a freeform address, for folder searchability.
+    Canadian addresses read 'street, TOWN PROV POSTAL, country' — take the segment after
+    the first comma and strip the province + postal noise. Returns '' when nothing clean is
+    found (the folder name simply omits it — never guesses)."""
+    if not address:
+        return ""
+    parts = [p.strip() for p in address.split(",") if p.strip()]
+    if len(parts) < 2:
+        return ""
+    seg = parts[1]
+    seg = re.sub(r"\b[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d\b", "", seg)          # postal code (V9Z 0P6)
+    seg = re.sub(r"\bB\.?\s*C\.?\b|\bBritish Columbia\b", "", seg, flags=re.I)  # province
+    return seg.strip(" .")
+
+
+def job_folder_path(
+    brand_value: str, on_date_iso: str, customer: str | None, job_id: str,
+    *, phone: str | None = None, address: str | None = None,
+) -> str:
+    """`<root>/<brand>/<date customer [town] [phone] short-id>` — one findable folder per job.
+
+    Date + name + town + phone are all packed into the name so a later Dropbox search finds
+    the folder by ANY of them; the short id keeps it unique AND cross-references the calendar
+    event (which carries `[app job <id>]`). Empty parts are dropped — never 'None', never a
+    double space."""
     root = settings.dropbox_root.rstrip("/")
     short = (job_id or "").split("-")[0]
-    name = _safe(f"{on_date_iso} {customer or 'job'} {short}".strip())
+    parts = [on_date_iso, (customer or "job"), _town_from_address(address), (phone or ""), short]
+    name = _safe(" ".join(p for p in (p.strip() for p in parts) if p))
     return f"{root}/{_safe(brand_value)}/{name}"
 
 
@@ -136,7 +161,10 @@ def ensure_job_folder(db, job, on_date) -> str | None:
     token = dropbox_oauth.get_valid_access_token(db)
     if not token:
         return None
-    path = job_folder_path(job.brand.value, on_date.isoformat(), job.customer_name, str(job.id))
+    path = job_folder_path(
+        job.brand.value, on_date.isoformat(), job.customer_name, str(job.id),
+        phone=job.customer_phone, address=job.address,
+    )
     create_folder(token, path)
     link = ensure_shared_link(token, path)
     details = dict(job.details or {})
