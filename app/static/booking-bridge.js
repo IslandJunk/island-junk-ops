@@ -98,7 +98,7 @@
   function parseStart() {
     var t = "";
     try { t = (val("hardTime") || "") || (val("pickWin") || ""); } catch (e) {}
-    var digits = String(t).split("-")[0].replace(/[^0-9]/g, "");
+    var digits = String(t).split(/[-–—]/)[0].replace(/[^0-9]/g, "");  // hyphen / en-dash / em-dash
     if (!digits) return null;
     var hh, mm;
     if (digits.length <= 2) { hh = parseInt(digits, 10); mm = 0; }
@@ -209,7 +209,11 @@
         var j = res.j || {};
         if (!res.ok) {   // real server error — previously this faked a green "Booked"
           btn.disabled = false; btn.style.background = "#C0392B";
-          btn.textContent = "Booking failed: " + (j.detail || "server error — try again");
+          var det = j.detail, msg;
+          if (typeof det === "string") { msg = det; }
+          else if (Array.isArray(det) && det[0]) { msg = (det[0].loc ? det[0].loc[det[0].loc.length - 1] + ": " : "") + (det[0].msg || "invalid"); }
+          else { msg = "server error — try again"; }
+          btn.textContent = "Booking failed: " + msg;
           return;
         }
         if (j.calendar_error) {   // Job saved but the calendar event didn't write — surface why

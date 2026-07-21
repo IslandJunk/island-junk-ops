@@ -1,6 +1,20 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-20 (BOOKING BUG found — calendar event not writing on live; false-green fixed + error surfaced)** —
+**2026-07-20 (BOOKING BUG ROOT CAUSE FOUND + FIXED — arrival-window en-dash broke time_start -> 422)** —
+The earlier "create_event failing on live" guess was **WRONG**. The error-surfacing fix (`bcba6c1`) revealed the
+truth: `/booking` was returning a **422** ("Booking failed: [object Object]"). Captured the exact bridge payload —
+`time_start` was **"12002:00"** (garbage). Cause: the arrival-window `<option>` values use an **EN-DASH "–"
+(U+2013)** (e.g. "12:00–2:00 PM"), but `parseStart()` in `booking-bridge.js` split on a plain hyphen "-" -> no
+split -> it mangled the whole string into digits -> invalid time -> Pydantic `time` rejected it (422). **So every
+UI booking WITH an arrival window has been silently 422ing** (masked by the old false-green button); create_event
+was never reached and is fine. FIX (`booking-bridge.js`): `parseStart` now splits on `/[-–—]/` (hyphen/en/em
+dash) -> valid times ("12:00", "07:00", ...); verified via captured payloads + a logic unit-test + clean console.
+Also made the "Booking failed" message extract the real Pydantic error (`field: msg`) instead of "[object Object]".
+Known minor follow-up: PM windows parse to an AM slot time (5 PM -> 05:00) — cosmetic only (the slot is
+positional; the real time is in the headline). **This unblocks bookings reaching the board AND the Dropbox
+folder/link (Phase 1b), which never ran because the request 422'd first.**
+
+**2026-07-20 (BOOKING — false-green fixed + error surfaced; led to the root cause above)** —
 Wes booked via the app and got a green "✓ Booked — event ? on TEST", but **no calendar event was created**
 (scan of the TEST calendar found none). Root: `booking-bridge.js` only checked 401/403, so it showed green even
 on a 500 — `gcal.create_event` is **raising on the LIVE server** (local booking + create_event work fine with
