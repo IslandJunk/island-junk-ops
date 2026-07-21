@@ -1356,7 +1356,7 @@ function invoicedFlowHTML(){
     <div class="card" style="--accent:var(--steel)">
       <div class="cap">Customer &amp; contact <span class="qb">QuickBooks — autofills</span></div>
       <div class="fld"><div class="lab">Company <span class="req">required</span></div><input type="text" id="company" autocomplete="off" placeholder="Start typing — commercial accounts"><datalist id="qbcoList"></datalist></div>
-      <div class="fld" id="acctWrap" style="display:none"><div class="lab">Account / location <span class="req">required</span></div><select id="acctPick"></select><div class="note" style="margin-top:8px">This company bills under more than one account — pick the right one so the invoice lands in the correct place.</div></div>
+      <div class="fld" id="acctWrap" style="display:none"><div class="lab">Account / location <span style="font-weight:600;color:var(--muted)">optional</span></div><input type="text" id="acctPick" autocomplete="off" list="acctList" placeholder="Pick a saved location or type this job's site"><datalist id="acctList"></datalist><div class="note" style="margin-top:8px">If this company has more than one account/site, pick it — or type a new one — so the invoice lands in the right place.</div></div>
       <div class="fld"><div class="lab">Contact name <span class="req">required</span></div><input type="text" id="contact" placeholder="Who booked it / billing contact"></div>
       <div class="fld row2">
         <div><div class="lab">Phone <span class="req">required</span></div><input type="text" id="phone" inputmode="tel" placeholder="(250) 555-…"></div>
@@ -1460,9 +1460,10 @@ function applyQBco(c){
   if(!$("#phone").value)$("#phone").value=c.phone;
   if(!$("#email").value)$("#email").value=c.email;
   if(!$("#addr").value)$("#addr").value=c.addr;
-  var aw=$("#acctWrap"), ap=$("#acctPick");
-  if(c.accounts){ ap.innerHTML='<option value="">Select account / location…</option>'+c.accounts.map(a=>'<option>'+a+'</option>').join(''); aw.style.display='block'; }
-  else { aw.style.display='none'; ap.innerHTML=''; }
+  var aw=$("#acctWrap"), al=$("#acctList");
+  var accts=(c.accounts||[]).filter(function(a){return a&&String(a).trim();});
+  if(al) al.innerHTML=accts.map(function(a){return '<option value="'+escB(a)+'">';}).join('');
+  aw.style.display='block';   // always available for commercial — pick a saved location or type a new one (optional)
   $("#qbHit").classList.remove('hide'); updateNearby();
 }
 function curQuoteMode(){ var c=$("#quoteMode .chip.on"); return c?c.dataset.q:'Estimate'; }
@@ -1583,7 +1584,7 @@ function invoicedCreate(){
   var acctOn=$("#acctWrap") && $("#acctWrap").style.display!=='none';
   var miss=[];
   if(!val('company')) miss.push('the company name');
-  if(acctOn && !val('acctPick')) miss.push('which account / location');
+  // Account / location is OPTIONAL now (pick a saved one or type this job's site) — no hard block.
   if(!val('contact')) miss.push('a contact name');
   if(!val('phone')) miss.push('a phone number');
   if(!val('email')) miss.push('a billing email');
