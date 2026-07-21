@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — Phase 1b PROVEN + closed; booking phone/address pickers live on ALL lanes; NEXT: rest of booking backlog)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`9bcff75`** (code), migration head
+**2026-07-21 (⭐ RESUME POINT — Phase 1b closed; booking pickers live on ALL lanes + "Job ready" popup scannable; NEXT: rest of booking backlog)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`17afb07`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -22,11 +22,16 @@
   **Live-spin check** (browser tooling hung on the local file, so Wes confirms live): /app/new-booking → Collect →
   Phone `250 555 0148` → tap Dave Mercer; Address `oxford` → tap; type-without-tapping → nothing fills. Then a
   commercial job → Company `hyundai`, and a bin drop → Customer `bmw`, behave the same.
+- **"Job ready" popup now SCANNABLE (`17afb07`, deployed):** the confirmation summary was a monospace wall — now the
+  proportional body font with each ALL-CAPS `LABEL:` bolded (`prettifyReview` + `.rvlab` on the six summary builders).
+  **Presentation-only:** `#mBody.textContent` is byte-identical, so booking-bridge's `headlineFromBody()` + notes are
+  untouched (round-trip verified incl. `& < > "` escaping). Plain-text modals (confirmation/missing/info) unchanged.
 
 > ▶▶ IMMEDIATE NEXT STEP — rest of the booking backlog (Wes's requests, all one screen), then Dropbox Phase 1c:
 > 2. **Quick-pick**: search-by-name instead of the giant scroll list.
 > 3. **Commercial (Proline)**: pick a location → auto-fill its address + save a NEW location per company (persist).
-> 4. Make the **"Job ready" popup SCANNABLE** (sections/labels, not a monospace wall) + a note/edit step in it.
+> 4. **"Job ready" popup — the note/edit step** (scannable half done `17afb07`; add a manager note + inline edit,
+>    best built with the running UI so the layout can be seen).
 > 5. Minor: afternoon arrival windows parse to an AM *slot* time (5 PM → 05:00). Cosmetic (slot is positional).
 > Then **Dropbox Phase 1c** — repoint the photo STORE from Postgres `job_photo` → the Dropbox job folder (now
 > unblocked by 1b); then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage → bin folder + alert).
