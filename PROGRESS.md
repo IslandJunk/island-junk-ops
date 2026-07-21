@@ -1,5 +1,45 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-20 (⭐ RESUME POINT — booking 422 fixed + LIVE; NEXT: Wes books to prove the calendar+Dropbox chain)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`c32d153`**, migration head
+**`d7a3f9c2e1b8`**, prod healthy at `island-junk-ops.onrender.com`. The arrival-window en-dash bug that made every
+windowed booking 422 is FIXED + live — so bookings should finally reach the board (and trigger the Dropbox folder+link).
+
+> ▶▶ IMMEDIATE NEXT STEP — Wes does this first in the new chat, then hands the result to Claude:
+> 1. **Hard-refresh** the New Booking page (Ctrl+Shift+R) at `island-junk-ops.onrender.com/app/new-booking`.
+> 2. Book a job **WITH an arrival window** → **CREATE JOB** → tap **"Book it — writes to TEST calendar"**.
+> 3. It should go **REAL green "✓ Booked (…) — event <id> on TEST"** (a real id, not "?").
+>
+> ▶▶ THEN Claude verifies **Phase 1b** end-to-end (this is the payoff):
+> - Read the TEST calendar (`app.integrations.gcal` locally — the local `.env` points at prod DB + the same
+>   TEST cal `google_test_calendar_id`) for the app event: it should have a `[app job …]` line **AND** a
+>   `Photos: <dropbox link>` line. Quick script: for `date.today()` ±1, `gcal.list_events_for_day(d)` then
+>   `gcal._svc().events().get(calendarId=settings.google_test_calendar_id, eventId=ev['id'])` and grep the
+>   description for `[app job` + `Photos:`. (The scratchpad `check_app_event.py` from the last session is gone —
+>   re-create it; ~15 lines.) Confirm the Dropbox link opens the job folder (Wes clicks it).
+> - If the button is **amber/red** instead: the bridge now shows the REAL error ("Booking failed: <field>: <msg>"
+>   or "Job saved, calendar write FAILED: <err>") — paste it and fix from there. (create_event itself is FINE;
+>   the earlier "create_event failing" theory was wrong — see the entry below.)
+
+**BOOKING-SCREEN BACKLOG (Wes's requests — do AFTER Phase 1b is proven; all one screen):**
+1. Make **PHONE + ADDRESS** auto-find a customer the same pick-only way NAME does now (reuse `makeCustPick`,
+   residential + commercial). Name picker is done (`e58ab02`): dropdown of matches w/ address+phone, fills ONLY on
+   explicit click, click-out = new customer, single list.
+2. **Quick-pick**: search-by-name instead of the giant scroll list.
+3. **Commercial (Proline)**: pick a location → auto-fill its address + **save a NEW location per company** (persist).
+   The immediate hard-block is already fixed (`19fb410`: Account/location is editable + optional now) — this is the
+   fuller location→address model.
+4. Make the **"Job ready" popup SCANNABLE** (sections/labels, not a monospace wall) + add a **note / edit** step in it.
+5. Minor: afternoon arrival windows parse to an AM *slot* time (5 PM → 05:00). Cosmetic (slot is positional; the
+   real time is in the headline) — add AM/PM to `parseStart` when convenient.
+
+**DROPBOX PHOTO SYSTEM status:** 1a (durable OAuth connect) LIVE + **Wes CONNECTED his Dropbox**. 1b (per-job
+folder + shared link written into the booking's calendar event) BUILT + deployed but **UNTESTED until a booking
+runs** — that's the verification above. 1c (repoint the photo STORE from Postgres `job_photo` → the Dropbox job
+folder) is HELD until 1b is proven. Then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage → bin
+folder + alert). Design rule locked: the folder LINK rides into the calendar event **at booking only** (never
+per-photo edits — honors the write-only-at-booking guardrail); crew before/after photos STAY in Messenger.
+
 **2026-07-20 (BOOKING BUG ROOT CAUSE FOUND + FIXED — arrival-window en-dash broke time_start -> 422)** —
 The earlier "create_event failing on live" guess was **WRONG**. The error-surfacing fix (`bcba6c1`) revealed the
 truth: `/booking` was returning a **422** ("Booking failed: [object Object]"). Captured the exact bridge payload —
