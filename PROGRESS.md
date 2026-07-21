@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — Phase 1b PROVEN + closed; residential booking pickers live; NEXT: commercial + bin lane pickers)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`4bf0ec3`** (code), migration head
+**2026-07-21 (⭐ RESUME POINT — Phase 1b PROVEN + closed; booking phone/address pickers live on ALL lanes; NEXT: rest of booking backlog)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`9bcff75`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -13,19 +13,23 @@
   e.g. `2026-07-20 Tom Sooke 642-7911 8bba501b` — findable by ANY of date/name/town/phone/id. Town parsed
   best-effort from the address (two-word towns OK; strips prov+postal), phone added, empty parts dropped, short-id
   always kept (cross-refs the calendar `[app job]`). `dropbox_files.py::job_folder_path` + `_town_from_address`.
-- **Booking pickers — RESIDENTIAL done (`4bf0ec3`, deployed; give it a live spin):** Phone + Address now use the
-  SAME pick-only customer dropdown as Name — fills ONLY on an explicit tap; the silent phone-autofill-on-typing and
-  the address string-autocomplete are gone. `makeCustPick(inputId, matcher, authoritative)` in `new-booking-v67.html`
-  (default matcher preserves the proven name behavior); `custMatchPhone`/`custMatchAddr` logic-tested. **Live-spin
-  check** (browser tooling hung on the local file, so Wes confirms live): /app/new-booking → Collect → type
-  `250 555 0148` in Phone → tap Dave Mercer; type `oxford` in Address → tap; type-without-tapping → nothing fills.
+- **Booking pickers — DONE on ALL lanes (`4bf0ec3` residential, `9bcff75` commercial+bin; deployed, give them a
+  live spin):** Phone + Address (and the commercial **Company** / bin **Customer**) now use the SAME pick-only
+  dropdown as Name — a row per match (name · address · phone), fills ONLY on an explicit tap; the old silent
+  autofill-on-typing/change is gone on every lane. Residential `makeCustPick`; commercial `makeCoPick`→`applyQBco`
+  (new `force` mode); bin `makeBinPick` (matches commercial accounts AND residential customers) — all built on a
+  shared `custPickCore`. Whole script esprima-parse-clean; every matcher logic-tested vs the demo accounts+customers.
+  **Live-spin check** (browser tooling hung on the local file, so Wes confirms live): /app/new-booking → Collect →
+  Phone `250 555 0148` → tap Dave Mercer; Address `oxford` → tap; type-without-tapping → nothing fills. Then a
+  commercial job → Company `hyundai`, and a bin drop → Customer `bmw`, behave the same.
 
-> ▶▶ IMMEDIATE NEXT STEP — commercial + bin lane pickers (backlog item #1 remainder):
-> Residential is done. The **commercial** lane (`#company`, fills via `applyQBco`) and **bin** lane (`#binCust`)
-> still use the old auto-fill-on-change (`makeAuto` + a `change` handler). Apply the same pick-only pattern there.
-> They draw from `commAccounts()` + `QB_CUST` and fill different fields, so they need a commercial-specific matcher
-> + fill (not the residential `applyQB`). Then the rest of the booking backlog (quick-pick search, Proline
-> locations, scannable "Job ready" popup, AM/PM slot cosmetic), then Dropbox Phase 1c (photo store → job folder).
+> ▶▶ IMMEDIATE NEXT STEP — rest of the booking backlog (Wes's requests, all one screen), then Dropbox Phase 1c:
+> 2. **Quick-pick**: search-by-name instead of the giant scroll list.
+> 3. **Commercial (Proline)**: pick a location → auto-fill its address + save a NEW location per company (persist).
+> 4. Make the **"Job ready" popup SCANNABLE** (sections/labels, not a monospace wall) + a note/edit step in it.
+> 5. Minor: afternoon arrival windows parse to an AM *slot* time (5 PM → 05:00). Cosmetic (slot is positional).
+> Then **Dropbox Phase 1c** — repoint the photo STORE from Postgres `job_photo` → the Dropbox job folder (now
+> unblocked by 1b); then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage → bin folder + alert).
 
 **2026-07-20 (booking 422 fixed + LIVE — Wes then booked to prove the calendar+Dropbox chain; DONE, see above)** —
 Everything below is done, committed, and deployed. Repo clean, HEAD **`c32d153`**, migration head
