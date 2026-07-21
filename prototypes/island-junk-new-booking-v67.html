@@ -781,9 +781,16 @@ function makeAuto(inputId, getItems){
 }
 /* Rich customer picker (Wes 2026-07): ONE dropdown of matching customers, each showing name +
    address + phone, and it fills the form ONLY when a row is clicked — never on typing/blur/enter —
-   so a stray match can't hijack the form. Duplicate names are told apart by their address/phone. */
-function makeCustPick(inputId){
+   so a stray match can't hijack the form. Duplicate names are told apart by their address/phone.
+   The NAME, PHONE and ADDRESS fields all use this same pick-only dropdown (Wes: phone + address
+   find a customer the exact way the name field does). `matcher(customer, query)` decides which
+   rows show; `authoritative` (phone/address picks) fills the picked customer's canonical values. */
+function custMatchName(c,q){ var nm=((c.first||'')+' '+(c.last||'')).trim().toLowerCase(); return !!nm && nm.indexOf(q)>=0; }
+function custMatchPhone(c,q){ var d=q.replace(/\D/g,''); if(d.length<4) return false; var k=custKey(c); if(!/^[0-9]+$/.test(k)) return false; return k.indexOf(d)>=0 || (k.length>=7 && k.slice(-7)===d.slice(-7)); }
+function custMatchAddr(c,q){ if(q.length<3) return false; var a=(c.addr||'').toLowerCase(); return !!a && a.indexOf(q)>=0; }
+function makeCustPick(inputId, matcher, authoritative){
   var inp=document.getElementById(inputId); if(!inp) return;
+  matcher = matcher || custMatchName;
   inp.setAttribute('autocomplete','off');
   var dd=document.createElement('div'); dd.className='acdd'; dd.style.display='none';
   inp.parentNode.insertBefore(dd, inp.nextSibling);
@@ -791,17 +798,14 @@ function makeCustPick(inputId){
     var q=(inp.value||'').toLowerCase().trim(); dd._m=[];
     if(!q){ dd.style.display='none'; dd.innerHTML=''; return; }
     var items=allCust(), m=[];
-    for(var i=0;i<items.length && m.length<8;i++){
-      var c=items[i], nm=((c.first||'')+' '+(c.last||'')).trim();
-      if(nm && nm.toLowerCase().indexOf(q)>=0) m.push(c);
-    }
+    for(var i=0;i<items.length && m.length<8;i++){ if(matcher(items[i], q)) m.push(items[i]); }
     dd._m=m;
     if(!m.length){ dd.style.display='none'; dd.innerHTML=''; return; }
     dd.innerHTML=m.map(function(c,i){
       var nm=((c.first||'')+' '+(c.last||'')).trim();
       var sub=[c.addr,c.phone].filter(Boolean).join('  ·  ');
       return '<div class="acit" data-i="'+i+'" style="white-space:normal">'+
-        '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escAuto(nm)+'</div>'+
+        '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escAuto(nm||'(no name on file)')+'</div>'+
         (sub?'<div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+escAuto(sub)+'</div>':'')+
         '</div>';
     }).join('');
@@ -813,7 +817,7 @@ function makeCustPick(inputId){
   dd.addEventListener('mousedown', function(e){
     var r=e.target.closest('.acit'); if(!r) return; e.preventDefault();
     var c=dd._m && dd._m[+r.getAttribute('data-i')]; dd.style.display='none';
-    if(c) applyQB(c);   // fill from the EXACT picked customer (duplicates handled correctly)
+    if(c) applyQB(c, authoritative);   // explicit pick → fill from the EXACT customer (authoritative for phone/addr)
   });
 }
 function travToggleOpen(){ var w=document.getElementById('travNotice'), b=document.getElementById('travBody'); if(!w||!b) return; var open=w.classList.toggle('open'); b.classList.toggle('hide', !open); }
@@ -1179,7 +1183,14 @@ function allCust(){ return QB_CUST.concat(loadResCust()); }
 function saveResCust(c){ if(!c||(!c.first&&!c.phone)) return; var k=custKey(c); if(!k) return; if(QB_CUST.some(function(x){return custKey(x)===k;})) return; var list=loadResCust(),i=-1; for(var n=0;n<list.length;n++){ if(custKey(list[n])===k){ i=n; break; } } var rec={first:c.first||'',last:c.last||'',phone:c.phone||'',email:c.email||'',addr:c.addr||''}; if(i>=0) list[i]=rec; else list.push(rec); try{ localStorage.setItem('ij_customers_v1', JSON.stringify(list)); }catch(e){} }
 function qbFind(v){ v=(v||'').trim().toLowerCase(); return allCust().find(x=>((x.first+' '+(x.last||'')).trim()).toLowerCase()===v); }
 function qbFindLoose(v){ v=(v||'').trim().toLowerCase(); return qbFind(v) || allCust().find(x=>(x.first||'').toLowerCase()===v); }
-function applyQB(c){ $("#fname").value=c.first; if(!$("#lname").value)$("#lname").value=c.last; if(!$("#phone").value)$("#phone").value=c.phone; if(!$("#email").value)$("#email").value=c.email; if(!$("#addr").value)$("#addr").value=c.addr; $("#qbHit").classList.remove('hide'); updateNearby(); }
+function applyQB(c, force){
+  if(force){ // explicit pick from the phone / address dropdown — use the picked customer's canonical values
+    $("#fname").value=c.first||''; $("#lname").value=c.last||''; $("#phone").value=c.phone||''; $("#email").value=c.email||''; $("#addr").value=c.addr||'';
+  } else {
+    $("#fname").value=c.first; if(!$("#lname").value)$("#lname").value=c.last; if(!$("#phone").value)$("#phone").value=c.phone; if(!$("#email").value)$("#email").value=c.email; if(!$("#addr").value)$("#addr").value=c.addr;
+  }
+  $("#qbHit").classList.remove('hide'); if(typeof travUpdate==='function') travUpdate(); updateNearby();
+}
 function collectWire(){
   $("#flowBack").addEventListener('click', backFromFlow);
   bookDate=new Date(); bookMoved=false; estItems=[];
@@ -1187,13 +1198,10 @@ function collectWire(){
   $("#chgDate").onclick=()=>{ const e=$("#dateEdit"); e.style.display = e.style.display==='none'?'block':'none'; };
   $("#bkDate").onchange=()=>{ const v=$("#bkDate").value; if(v){ bookDate=new Date(v+'T00:00:00'); bookMoved=true; paintDate(); } };
   $("#addrList").innerHTML = allCust().map(c=>'<option value="'+c.addr+'">').join('');
-  // Name auto-fill on typing/blur removed (Wes): the form fills ONLY from an explicit pick in
-  // makeCustPick('fname') below, so a stray first-name match can never hijack the form.
-  $("#phone").addEventListener('input', ()=>{ var d=($("#phone").value||'').replace(/\D/g,''); if(d.length<7) return;
-    var c=allCust().find(function(x){ var k=custKey(x); if(!k) return false;
-      return k===d || (d.length>=10&&k.length>=10&&k.slice(-10)===d.slice(-10)) || (k.slice(-7)===d.slice(-7)); });
-    if(c){ applyQB(c); var h=$("#qbHit"); if(h){ h.classList.remove('hide'); h.textContent='\u2713 Return customer \u2014 pulled name, contact & address from past bookings'; } } });
+  // Name / phone / address all fill ONLY from an explicit pick in the pick-only dropdowns below \u2014
+  // never silently on typing/blur (Wes), so a stray match can never hijack the form.
   try{ makeCustPick('fname'); }catch(e){}
+  try{ makeCustPick('phone', custMatchPhone, true); }catch(e){}
   $("#addr").addEventListener('input', updateNearby);
   $("#nbBar").onclick=()=>{ const body=$("#nbBody"), bar=$("#nbBar"); const open=!body.classList.contains('hide'); body.classList.toggle('hide'); bar.classList.toggle('on', !open); };
   $("#eLoad").onchange=()=>{ $("#eMinBox").style.display=$("#eLoad").value==='min'?'block':'none'; collectCalc(); };
@@ -1204,7 +1212,7 @@ function collectWire(){
   $("#eItems").onclick=e=>{ const rm=e.target.closest('[data-rm]'); if(rm){ estItems.splice(+rm.dataset.rm,1); renderEstItems(); collectCalc(); return; } const st=e.target.closest('[data-ei]'); if(st){ const i=+st.dataset.ei,d=+st.dataset.d; estItems[i].qty=Math.max(1,estItems[i].qty+d); renderEstItems(); collectCalc(); } };
   toolsRecalc=collectCalc; toolsPicked=[]; renderTools(); wireTools();
   $("#addr").addEventListener('input', travUpdate); travUpdate();
-  makeAuto('addr', function(){ return allCust().map(function(c){ return c.addr; }); });
+  try{ makeCustPick('addr', custMatchAddr, true); }catch(e){}
   mgrPhotos=[]; renderPhotos(); wirePhotos();
   crewReqWire();
   newCustWire();
