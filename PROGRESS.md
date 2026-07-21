@@ -1,5 +1,18 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-20 (BOOKING BUG found — calendar event not writing on live; false-green fixed + error surfaced)** —
+Wes booked via the app and got a green "✓ Booked — event ? on TEST", but **no calendar event was created**
+(scan of the TEST calendar found none). Root: `booking-bridge.js` only checked 401/403, so it showed green even
+on a 500 — `gcal.create_event` is **raising on the LIVE server** (local booking + create_event work fine with
+the local Google key, so this is live-specific — likely the Render Google Secret File key / write access, TBD).
+Shipped a fix to expose it: (1) `create_booking` now wraps `create_event` in try/except — the Job still saves,
+`gcal_event_id=None`, and the error is stashed in `job.details['_calendar_error']` + logged; (2) `BookingOut`
+returns `calendar_error`; (3) the bridge checks `r.ok` and shows the real outcome ("Booking failed: …" on a 500,
+"Job saved, calendar write FAILED: <err>" when the event didn't write, green only on real success). NEXT: Wes
+re-books once -> the button shows the actual `create_event` error -> fix the root cause. THEN Wes's 3 booking-UX
+requests (phone+address pickers like the name one; make the "Job ready" popup scannable not a text blob; add a
+note/edit option in that popup).
+
 **2026-07-20 (Booking — residential customer picker fixed, per Wes)** — The New-Booking residential lane's
 customer autofill was hijacking the form: it auto-filled on typing AND on blur/enter via a first-name match
 (grabbing the wrong person), showed TWO dropdowns, and gave no way to tell duplicate names apart. Fixed in

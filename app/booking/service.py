@@ -120,10 +120,20 @@ def create_booking(
     except Exception:
         pass   # Dropbox is a nicety — a failure here never fails the booking
     if write_calendar:
-        job.gcal_event_id = gcal.create_event(
-            summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,
-            on_date=on_date, start_time=time_start, end_time=time_end,
-        )
+        try:
+            job.gcal_event_id = gcal.create_event(
+                summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,
+                on_date=on_date, start_time=time_start, end_time=time_end,
+            )
+        except Exception as exc:
+            # Don't lose the booking on a calendar hiccup — the Job is still saved; record the
+            # error so the UI + logs surface it (previously this 500'd and the button faked success).
+            import logging
+            logging.getLogger("booking").exception("calendar write failed")
+            job.gcal_event_id = None
+            d = dict(job.details or {})
+            d["_calendar_error"] = f"{type(exc).__name__}: {exc}"[:400]
+            job.details = d
     # NOTE: the §9/§11 CC-charge reminder is NOT created here. Per Wes, the 48-working-hour
     # clock starts when the owner SENDS THE INVOICE (after pickup, sometimes days later),
     # not at booking/drop — so it's created via POST /reminders/cc-charge at invoice time.

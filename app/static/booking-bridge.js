@@ -204,8 +204,19 @@
         body: JSON.stringify(payload()),
       }).then(function (r) {
         if (r.status === 401 || r.status === 403) { throw new Error("auth"); }
-        return r.json();
-      }).then(function (j) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      }).then(function (res) {
+        var j = res.j || {};
+        if (!res.ok) {   // real server error — previously this faked a green "Booked"
+          btn.disabled = false; btn.style.background = "#C0392B";
+          btn.textContent = "Booking failed: " + (j.detail || "server error — try again");
+          return;
+        }
+        if (j.calendar_error) {   // Job saved but the calendar event didn't write — surface why
+          btn.style.background = "#E8A317";
+          btn.textContent = "Job saved, calendar write FAILED: " + j.calendar_error;
+          return;
+        }
         btn.textContent = "✓ Booked (" + lane() + ") — event " + (j.gcal_event_id || "?") + " on TEST";
         btn.style.background = "#3CA03C";
         uploadBookingPhotos(j && j.id, btn);   // best-effort: file the attached photos onto the job

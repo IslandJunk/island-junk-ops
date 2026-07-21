@@ -46,6 +46,7 @@ class BookingOut(BaseModel):
     headline: str
     status: str
     gcal_event_id: str | None
+    calendar_error: str | None = None
 
 
 @router.post("", response_model=BookingOut)
@@ -57,4 +58,5 @@ def create_booking(
     job = service.create_booking(db, **body.model_dump())
     return BookingOut(
         id=str(job.id), headline=job.headline, status=job.status.value, gcal_event_id=job.gcal_event_id,
+        calendar_error=(job.details or {}).get("_calendar_error"),
     )
