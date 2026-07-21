@@ -1,7 +1,34 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-20 (⭐ RESUME POINT — booking 422 fixed + LIVE; NEXT: Wes books to prove the calendar+Dropbox chain)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`c32d153`**, migration head
+**2026-07-21 (⭐ RESUME POINT — Phase 1b PROVEN + closed; residential booking pickers live; NEXT: commercial + bin lane pickers)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`4bf0ec3`** (code), migration head
+**`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
+
+- **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
+  residential job via the app → real green "✓ Booked — event `kluspr5nq2pjp5enqp5cec2qbg` on TEST". Read the event
+  off the TEST calendar (`check_app_event.py`): it carries the `[app job 8bba501b-…]` marker AND a `Photos: <dropbox
+  link>` line, appears in `list_events_for_day`, colour Sage/2, `ij_app=1`. Wes clicked the link → it opens the job's
+  Dropbox folder. **Calendar + Dropbox chain both fire.** ✅
+- **Dropbox folder names now searchable (`a7da706`, deployed):** `<root>/<brand>/<date name town phone short-id>`,
+  e.g. `2026-07-20 Tom Sooke 642-7911 8bba501b` — findable by ANY of date/name/town/phone/id. Town parsed
+  best-effort from the address (two-word towns OK; strips prov+postal), phone added, empty parts dropped, short-id
+  always kept (cross-refs the calendar `[app job]`). `dropbox_files.py::job_folder_path` + `_town_from_address`.
+- **Booking pickers — RESIDENTIAL done (`4bf0ec3`, deployed; give it a live spin):** Phone + Address now use the
+  SAME pick-only customer dropdown as Name — fills ONLY on an explicit tap; the silent phone-autofill-on-typing and
+  the address string-autocomplete are gone. `makeCustPick(inputId, matcher, authoritative)` in `new-booking-v67.html`
+  (default matcher preserves the proven name behavior); `custMatchPhone`/`custMatchAddr` logic-tested. **Live-spin
+  check** (browser tooling hung on the local file, so Wes confirms live): /app/new-booking → Collect → type
+  `250 555 0148` in Phone → tap Dave Mercer; type `oxford` in Address → tap; type-without-tapping → nothing fills.
+
+> ▶▶ IMMEDIATE NEXT STEP — commercial + bin lane pickers (backlog item #1 remainder):
+> Residential is done. The **commercial** lane (`#company`, fills via `applyQBco`) and **bin** lane (`#binCust`)
+> still use the old auto-fill-on-change (`makeAuto` + a `change` handler). Apply the same pick-only pattern there.
+> They draw from `commAccounts()` + `QB_CUST` and fill different fields, so they need a commercial-specific matcher
+> + fill (not the residential `applyQB`). Then the rest of the booking backlog (quick-pick search, Proline
+> locations, scannable "Job ready" popup, AM/PM slot cosmetic), then Dropbox Phase 1c (photo store → job folder).
+
+**2026-07-20 (booking 422 fixed + LIVE — Wes then booked to prove the calendar+Dropbox chain; DONE, see above)** —
+Everything below is done, committed, and deployed. Repo clean, HEAD **`c32d153`**, migration head
 **`d7a3f9c2e1b8`**, prod healthy at `island-junk-ops.onrender.com`. The arrival-window en-dash bug that made every
 windowed booking 422 is FIXED + live — so bookings should finally reach the board (and trigger the Dropbox folder+link).
 
