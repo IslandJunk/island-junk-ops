@@ -142,7 +142,8 @@
   @media(min-width:560px){.ovl{align-items:center;padding:16px}.modal{border-radius:18px}}
   .modal h3{font-family:"Anton";font-size:20px;margin:0 0 6px;color:var(--ink)}
   .modal .msub{font-size:12.5px;color:var(--muted);margin-bottom:13px;line-height:1.5}
-  .modal pre{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:13px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;color:var(--ink);margin:0}
+  .modal pre{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;font-family:inherit;color:var(--ink);margin:0}
+  .modal pre .rvlab{font-weight:800;letter-spacing:.01em}
   .modal .close{margin-top:14px;width:100%;background:var(--ink);color:#fff;border:none;border-radius:11px;padding:13px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer}
 
   /* ===== merged Custom Booking build portion ===== */
@@ -879,6 +880,15 @@ function travUpdate(){ var a=document.getElementById('addr'); detectTravel(a?a.v
     } else { box.style.display='none'; box.classList.remove('open'); var bd=document.getElementById('travBody'); if(bd) bd.classList.add('hide'); } }
   if(typeof toolsRecalc==='function') toolsRecalc(); }
 function escB(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+/* Render the "Job ready" summary scannably: escape every line, then bold the ALL-CAPS "LABEL:" prefix.
+   Wrapping in <span> is purely visual — #mBody.textContent still returns the EXACT same lines the
+   booking bridge parses (CALENDAR HEADLINE + the notes field), so the write path is untouched. */
+function prettifyReview(text){
+  return String(text==null?'':text).split('\n').map(function(line){
+    var m=line.match(/^(\s*)([A-Z][A-Z0-9 \/&.\-]*[A-Z]):([\s\S]*)$/);
+    return m ? escB(m[1])+'<span class="rvlab">'+escB(m[2])+':</span>'+escB(m[3]) : escB(line);
+  }).join('\n');
+}
 function seedDB(){ return COMPANIES.map(c=>{ const co={id:uid(),nm:c.nm,addr:c.addr||'',email:'',contact:'',phone:'',src:'qb',groups:[]};
   if(c.groups){ for(const g in c.groups){ co.groups.push({id:uid(),nm:g,bldgs:c.groups[g].map(b=>({id:uid(),n:b.n,a:b.a||'',email:'',contact:'',phone:''}))}); } }
   else { co.groups.push({id:uid(),nm:'',bldgs:(c.bldgs||[]).map(b=>({id:uid(),n:b.n,a:b.a||'',email:'',contact:'',phone:''}))}); }
@@ -1313,7 +1323,7 @@ function collectCreate(){
   L.push("RECURRING: one-off");
   $("#mTitle").textContent="Job ready";
   $("#mSub").textContent="The job record the app would create. Writes to Google Calendar (TEST calendar during the build) + the app database — never the live board, never an invoice or charge. The estimate is internal; the crew never sees it.";
-  $("#mBody").textContent=L.join("\n"); if(window.bkDraftClear)bkDraftClear();
+  $("#mBody").innerHTML=prettifyReview(L.join("\n")); if(window.bkDraftClear)bkDraftClear();
   $("#ovl").classList.add('show');
 }
 
@@ -1689,7 +1699,7 @@ function invoicedCreate(){
   L.push("INITIAL COLOUR: "+col.name+" (Google id "+col.id+")"+(curColour==='sage'?" — unassigned; set the real colour day before/of":""));
   $("#mTitle").textContent="Job ready";
   $("#mSub").textContent="The job record the app would create. The estimator details pre-fill the crew's Commercial Form. Writes to Google Calendar (TEST during the build) + the app database — never the live board, never an invoice or charge.";
-  $("#mBody").textContent=L.join("\n"); if(window.bkDraftClear)bkDraftClear();
+  $("#mBody").innerHTML=prettifyReview(L.join("\n")); if(window.bkDraftClear)bkDraftClear();
   $("#ovl").classList.add('show');
 }
 
@@ -1896,7 +1906,7 @@ function binsCreate(){
   L.push("CREW FORM: Crew · Truck · HQ return time  (→ Bin Tracker)");
   $("#mTitle").textContent="Bin job ready";
   $("#mSub").textContent="The job the app would create. Writes to Google Calendar (TEST during the build) + the app database — never the live board, never an invoice or charge.";
-  $("#mBody").textContent=L.join("\n"); if(window.bkDraftClear)bkDraftClear();
+  $("#mBody").innerHTML=prettifyReview(L.join("\n")); if(window.bkDraftClear)bkDraftClear();
   $("#ovl").classList.add('show');
 }
 /* =================== END BINS LANE =================== */
@@ -2411,7 +2421,7 @@ function customBook(){
   L.push("REPEATS: one-off");
   $("#mTitle").textContent="Job ready";
   $("#mSub").textContent="The job record the app would create. Writes to Google Calendar (TEST calendar during the build) + the app database - never the live board, never an invoice or charge.";
-  $("#mBody").textContent=L.join("\n"); if(window.bkDraftClear)bkDraftClear();
+  $("#mBody").innerHTML=prettifyReview(L.join("\n")); if(window.bkDraftClear)bkDraftClear();
   $("#ovl").classList.add('show');
 }
 
@@ -2686,7 +2696,7 @@ function palletCreate(){
   L.push("INITIAL COLOUR: "+col.name+" (Google id "+col.id+")"+(curColour==='sage'?"   \u2014 unassigned; set the real colour on the calendar, which adds it to the truck\u2019s day board":""));
   $("#mTitle").textContent="Job ready";
   $("#mSub").textContent="The job record the app would create. Defaults to unassigned \u2014 colour it on the calendar to drop it on a truck\u2019s day board. Writes to Google Calendar (TEST during build).";
-  $("#mBody").textContent=L.join("\n");
+  $("#mBody").innerHTML=prettifyReview(L.join("\n"));
   if(window.bkDraftClear)bkDraftClear();
   $("#ovl").classList.add('show');
 }
@@ -2713,7 +2723,7 @@ $("#create").addEventListener("click", () => {
   L.push($("#recOn") && $("#recOn").checked ? ("RECURRING: " + $("#freq").value + " — " + (recDays.join(", ")||"no days")) : "RECURRING: one-off");
   $("#mTitle").textContent = "Job ready";
   $("#mSub").textContent = "The job record the app would create. Writes to Google Calendar (TEST calendar during the build) + the app database — never the live board, never an invoice or charge.";
-  $("#mBody").textContent = L.join("\n");
+  $("#mBody").innerHTML = prettifyReview(L.join("\n"));
   $("#ovl").classList.add('show');
 });
 $("#mClose").addEventListener("click", () => $("#ovl").classList.remove('show'));
