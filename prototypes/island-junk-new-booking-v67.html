@@ -779,6 +779,43 @@ function makeAuto(inputId, getItems){
   inp.addEventListener('blur', function(){ setTimeout(function(){ dd.style.display='none'; }, 150); });
   dd.addEventListener('mousedown', function(e){ var r=e.target.closest('.acit'); if(!r) return; e.preventDefault(); inp.value=r.textContent; dd.style.display='none'; window._acPicking=true; inp.dispatchEvent(new Event('input')); window._acPicking=false; });
 }
+/* Rich customer picker (Wes 2026-07): ONE dropdown of matching customers, each showing name +
+   address + phone, and it fills the form ONLY when a row is clicked — never on typing/blur/enter —
+   so a stray match can't hijack the form. Duplicate names are told apart by their address/phone. */
+function makeCustPick(inputId){
+  var inp=document.getElementById(inputId); if(!inp) return;
+  inp.setAttribute('autocomplete','off');
+  var dd=document.createElement('div'); dd.className='acdd'; dd.style.display='none';
+  inp.parentNode.insertBefore(dd, inp.nextSibling);
+  function render(){
+    var q=(inp.value||'').toLowerCase().trim(); dd._m=[];
+    if(!q){ dd.style.display='none'; dd.innerHTML=''; return; }
+    var items=allCust(), m=[];
+    for(var i=0;i<items.length && m.length<8;i++){
+      var c=items[i], nm=((c.first||'')+' '+(c.last||'')).trim();
+      if(nm && nm.toLowerCase().indexOf(q)>=0) m.push(c);
+    }
+    dd._m=m;
+    if(!m.length){ dd.style.display='none'; dd.innerHTML=''; return; }
+    dd.innerHTML=m.map(function(c,i){
+      var nm=((c.first||'')+' '+(c.last||'')).trim();
+      var sub=[c.addr,c.phone].filter(Boolean).join('  ·  ');
+      return '<div class="acit" data-i="'+i+'" style="white-space:normal">'+
+        '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escAuto(nm)+'</div>'+
+        (sub?'<div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+escAuto(sub)+'</div>':'')+
+        '</div>';
+    }).join('');
+    dd.style.display='block';
+  }
+  inp.addEventListener('input', render);
+  inp.addEventListener('focus', render);
+  inp.addEventListener('blur', function(){ setTimeout(function(){ dd.style.display='none'; }, 160); });
+  dd.addEventListener('mousedown', function(e){
+    var r=e.target.closest('.acit'); if(!r) return; e.preventDefault();
+    var c=dd._m && dd._m[+r.getAttribute('data-i')]; dd.style.display='none';
+    if(c) applyQB(c);   // fill from the EXACT picked customer (duplicates handled correctly)
+  });
+}
 function travToggleOpen(){ var w=document.getElementById('travNotice'), b=document.getElementById('travBody'); if(!w||!b) return; var open=w.classList.toggle('open'); b.classList.toggle('hide', !open); }
 function travUpdate(){ var a=document.getElementById('addr'); detectTravel(a?a.value:'');
   var box=document.getElementById('travNotice');
@@ -1149,15 +1186,14 @@ function collectWire(){
   paintDate(); renderEstItems(); renderNearbyActionable();
   $("#chgDate").onclick=()=>{ const e=$("#dateEdit"); e.style.display = e.style.display==='none'?'block':'none'; };
   $("#bkDate").onchange=()=>{ const v=$("#bkDate").value; if(v){ bookDate=new Date(v+'T00:00:00'); bookMoved=true; paintDate(); } };
-  $("#qbList").innerHTML = allCust().map(c=>'<option value="'+(c.first+(c.last?' '+c.last:''))+'">').join('');
   $("#addrList").innerHTML = allCust().map(c=>'<option value="'+c.addr+'">').join('');
-  $("#fname").addEventListener('input', ()=>{ const c=qbFind($("#fname").value); if(c) applyQB(c); });
-  $("#fname").addEventListener('change', ()=>{ const c=qbFindLoose($("#fname").value); if(c) applyQB(c); });
+  // Name auto-fill on typing/blur removed (Wes): the form fills ONLY from an explicit pick in
+  // makeCustPick('fname') below, so a stray first-name match can never hijack the form.
   $("#phone").addEventListener('input', ()=>{ var d=($("#phone").value||'').replace(/\D/g,''); if(d.length<7) return;
     var c=allCust().find(function(x){ var k=custKey(x); if(!k) return false;
       return k===d || (d.length>=10&&k.length>=10&&k.slice(-10)===d.slice(-10)) || (k.slice(-7)===d.slice(-7)); });
     if(c){ applyQB(c); var h=$("#qbHit"); if(h){ h.classList.remove('hide'); h.textContent='\u2713 Return customer \u2014 pulled name, contact & address from past bookings'; } } });
-  try{ makeAuto('fname', function(){ return allCust().map(function(x){ return (x.first+' '+(x.last||'')).trim(); }).filter(Boolean); }); }catch(e){}
+  try{ makeCustPick('fname'); }catch(e){}
   $("#addr").addEventListener('input', updateNearby);
   $("#nbBar").onclick=()=>{ const body=$("#nbBody"), bar=$("#nbBar"); const open=!body.classList.contains('hide'); body.classList.toggle('hide'); bar.classList.toggle('on', !open); };
   $("#eLoad").onchange=()=>{ $("#eMinBox").style.display=$("#eLoad").value==='min'?'block':'none'; collectCalc(); };
@@ -1168,7 +1204,6 @@ function collectWire(){
   $("#eItems").onclick=e=>{ const rm=e.target.closest('[data-rm]'); if(rm){ estItems.splice(+rm.dataset.rm,1); renderEstItems(); collectCalc(); return; } const st=e.target.closest('[data-ei]'); if(st){ const i=+st.dataset.ei,d=+st.dataset.d; estItems[i].qty=Math.max(1,estItems[i].qty+d); renderEstItems(); collectCalc(); } };
   toolsRecalc=collectCalc; toolsPicked=[]; renderTools(); wireTools();
   $("#addr").addEventListener('input', travUpdate); travUpdate();
-  makeAuto('fname', function(){ return allCust().map(function(c){ return c.first+(c.last?' '+c.last:''); }); });
   makeAuto('addr', function(){ return allCust().map(function(c){ return c.addr; }); });
   mgrPhotos=[]; renderPhotos(); wirePhotos();
   crewReqWire();

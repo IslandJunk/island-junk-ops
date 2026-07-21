@@ -1,5 +1,17 @@
 # Island Junk — Build Progress & Handoff
 
+**2026-07-20 (Booking — residential customer picker fixed, per Wes)** — The New-Booking residential lane's
+customer autofill was hijacking the form: it auto-filled on typing AND on blur/enter via a first-name match
+(grabbing the wrong person), showed TWO dropdowns, and gave no way to tell duplicate names apart. Fixed in
+`prototypes/island-junk-new-booking-v67.html` (`collectWire` + new `makeCustPick`): ONE dropdown showing each
+match as **name + address + phone**, and the form fills **ONLY when a row is explicitly clicked** (never on
+typing/blur/enter), from that exact customer object so duplicate names resolve correctly. Removed the dead native
+`qbList` datalist + the duplicate `makeAuto('fname')`. Kept the phone-number autofill (unambiguous). Verified live
+against the 2,173 real imported customers (multiple "Aaron"s: typing+blur filled nothing; picking "Aaron Hopwood"
+filled his exact record — `250-588-7235`, `1008 Pandora Ave`). This edits the approved prototype directly (the
+behavior is too coupled to override from the bridge) — owner-directed change. NOTE: the commercial (`#company`) +
+bin (`#binCust`) lanes still have the old auto-fill-on-change pattern; apply the same fix there when confirmed.
+
 **2026-07-14 (Dropbox Phase 1b — per-job folder + calendar link at booking; built dry-run, repoint held)** —
 At booking the app now creates the job's Dropbox folder + a stable shared link and writes the link into the
 calendar event description (`Photos: <link>`), so searching the job in Calendar -> click -> the folder. Honors
