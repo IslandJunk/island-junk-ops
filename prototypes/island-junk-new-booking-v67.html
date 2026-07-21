@@ -820,6 +820,55 @@ function makeCustPick(inputId, matcher, authoritative){
     if(c) applyQB(c, authoritative);   // explicit pick → fill from the EXACT customer (authoritative for phone/addr)
   });
 }
+/* Generic pick-only dropdown core — shared by the commercial (makeCoPick) and bin (makeBinPick)
+   customer finders below. opts: { items()->[], matcher(rec,q)->bool, label(rec)->{title,sub},
+   onPick(rec) }. Same contract as makeCustPick: shows matches, fills ONLY on an explicit row tap. */
+function custPickCore(inputId, opts){
+  var inp=document.getElementById(inputId); if(!inp) return;
+  inp.setAttribute('autocomplete','off');
+  var dd=document.createElement('div'); dd.className='acdd'; dd.style.display='none';
+  inp.parentNode.insertBefore(dd, inp.nextSibling);
+  function render(){
+    var q=(inp.value||'').toLowerCase().trim(); dd._m=[];
+    if(!q){ dd.style.display='none'; dd.innerHTML=''; return; }
+    var items=opts.items()||[], m=[];
+    for(var i=0;i<items.length && m.length<8;i++){ if(opts.matcher(items[i], q)) m.push(items[i]); }
+    dd._m=m;
+    if(!m.length){ dd.style.display='none'; dd.innerHTML=''; return; }
+    dd.innerHTML=m.map(function(c,i){
+      var lb=opts.label(c)||{}, title=lb.title||'(no name on file)', sub=lb.sub||'';
+      return '<div class="acit" data-i="'+i+'" style="white-space:normal">'+
+        '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escAuto(title)+'</div>'+
+        (sub?'<div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+escAuto(sub)+'</div>':'')+
+        '</div>';
+    }).join('');
+    dd.style.display='block';
+  }
+  inp.addEventListener('input', render);
+  inp.addEventListener('focus', render);
+  inp.addEventListener('blur', function(){ setTimeout(function(){ dd.style.display='none'; }, 160); });
+  dd.addEventListener('mousedown', function(e){
+    var r=e.target.closest('.acit'); if(!r) return; e.preventDefault();
+    var c=dd._m && dd._m[+r.getAttribute('data-i')]; dd.style.display='none';
+    if(c) opts.onPick(c);
+  });
+}
+/* Commercial account finder — company / address / phone all fill via applyQBco on an explicit pick. */
+function coMatchName(c,q){ var n=(c.co||'').toLowerCase(); return !!n && n.indexOf(q)>=0; }
+function coMatchAddr(c,q){ if(q.length<3) return false; var a=(c.addr||'').toLowerCase(); return !!a && a.indexOf(q)>=0; }
+function coMatchPhone(c,q){ var d=q.replace(/\D/g,''); if(d.length<4) return false; var k=String(c.phone||'').replace(/\D/g,''); if(!k) return false; return k.indexOf(d)>=0 || (k.length>=7 && k.slice(-7)===d.slice(-7)); }
+function coLabel(c){ return { title: c.co||'(unnamed account)', sub: [c.addr,c.phone,c.contact].filter(Boolean).join('  ·  ') }; }
+function makeCoPick(inputId, matcher){ return custPickCore(inputId, { items: commAccounts, matcher: matcher, label: coLabel, onPick: function(c){ applyQBco(c, true); } }); }
+/* Bin finder — matches BOTH commercial accounts (by company) and residential customers (by name),
+   and fills the bin-lane fields on an explicit pick. */
+function recName(c){ return c.co || ((c.first||'')+' '+(c.last||'')).trim(); }
+function binItems(){ return commAccounts().concat(allCust()); }
+function binMatchName(c,q){ var n=recName(c).toLowerCase(); return !!n && n.indexOf(q)>=0; }
+function binMatchAddr(c,q){ if(q.length<3) return false; var a=(c.addr||'').toLowerCase(); return !!a && a.indexOf(q)>=0; }
+function binMatchPhone(c,q){ var d=q.replace(/\D/g,''); if(d.length<4) return false; var k=String(c.phone||'').replace(/\D/g,''); if(!k) return false; return k.indexOf(d)>=0 || (k.length>=7 && k.slice(-7)===d.slice(-7)); }
+function binLabel(c){ return { title: recName(c)||'(no name on file)', sub: [c.addr,c.phone].filter(Boolean).join('  ·  ') }; }
+function binFill(c){ if($("#binCust")) $("#binCust").value=recName(c); if($("#binAddr")) $("#binAddr").value=c.addr||''; if($("#binPhone")) $("#binPhone").value=c.phone||''; if($("#binEmail")) $("#binEmail").value=c.email||''; }
+function makeBinPick(inputId, matcher){ return custPickCore(inputId, { items: binItems, matcher: matcher, label: binLabel, onPick: binFill }); }
 function travToggleOpen(){ var w=document.getElementById('travNotice'), b=document.getElementById('travBody'); if(!w||!b) return; var open=w.classList.toggle('open'); b.classList.toggle('hide', !open); }
 function travUpdate(){ var a=document.getElementById('addr'); detectTravel(a?a.value:'');
   var box=document.getElementById('travNotice');
@@ -1463,16 +1512,21 @@ function invoicedFlowHTML(){
     <div style="height:96px"></div>`;
 }
 function qbFindCo(v){ return commFindCo(v); }
-function applyQBco(c){
-  if(!$("#contact").value)$("#contact").value=c.contact;
-  if(!$("#phone").value)$("#phone").value=c.phone;
-  if(!$("#email").value)$("#email").value=c.email;
-  if(!$("#addr").value)$("#addr").value=c.addr;
+function applyQBco(c, force){
+  if(force){ // explicit pick from a makeCoPick dropdown — set the company + canonical account values
+    if($("#company")) $("#company").value=c.co||'';
+    $("#contact").value=c.contact||''; $("#phone").value=c.phone||''; $("#email").value=c.email||''; $("#addr").value=c.addr||'';
+  } else {
+    if(!$("#contact").value)$("#contact").value=c.contact;
+    if(!$("#phone").value)$("#phone").value=c.phone;
+    if(!$("#email").value)$("#email").value=c.email;
+    if(!$("#addr").value)$("#addr").value=c.addr;
+  }
   var aw=$("#acctWrap"), al=$("#acctList");
   var accts=(c.accounts||[]).filter(function(a){return a&&String(a).trim();});
   if(al) al.innerHTML=accts.map(function(a){return '<option value="'+escB(a)+'">';}).join('');
-  aw.style.display='block';   // always available for commercial — pick a saved location or type a new one (optional)
-  $("#qbHit").classList.remove('hide'); updateNearby();
+  if(aw) aw.style.display='block';   // always available for commercial — pick a saved location or type a new one (optional)
+  $("#qbHit").classList.remove('hide'); if(typeof travUpdate==='function') travUpdate(); updateNearby();
 }
 function curQuoteMode(){ var c=$("#quoteMode .chip.on"); return c?c.dataset.q:'Estimate'; }
 function exPrice(x){
@@ -1540,8 +1594,7 @@ function invoicedWire(){
   $("#flowBack").addEventListener('click', backFromFlow);
   bookDate=new Date(); bookMoved=false; invExtras=[]; toolsPicked=[]; toolsRecalc=invCalc; poUserSet=false;
   $("#addr").addEventListener('input', travUpdate); travUpdate();
-  makeAuto('company', function(){ return commAccounts().map(function(c){ return c.co; }); });
-  makeAuto('addr', function(){ return commAccounts().map(function(c){ return c.addr; }); });
+  try{ makeCoPick('company', coMatchName); makeCoPick('addr', coMatchAddr); makeCoPick('phone', coMatchPhone); }catch(e){}
   mgrPhotos=[]; renderPhotos(); wirePhotos();
   crewReqWire();
   newCustWire();
@@ -1549,8 +1602,10 @@ function invoicedWire(){
   paintDate(); renderNearbyActionable(); renderInvExtras(); invCalc(); renderTools();
   $("#qbcoList").innerHTML = commAccounts().map(function(c){return '<option value="'+c.co+'">';}).join('');
   $("#addrList").innerHTML = commAccounts().map(function(c){return '<option value="'+c.addr+'">';}).join('');
-  $("#company").addEventListener('input', function(){ var c=qbFindCo($("#company").value); if(c) applyQBco(c); poCheckCompany(); });
-  $("#company").addEventListener('change', function(){ var c=qbFindCo($("#company").value); if(c) applyQBco(c); poCheckCompany(); });
+  // Company / address / phone fill ONLY from an explicit pick in the makeCoPick dropdowns above (Wes),
+  // never silently on typing; poCheckCompany still runs so the PO-number prompt tracks the typed name.
+  $("#company").addEventListener('input', poCheckCompany);
+  $("#company").addEventListener('change', poCheckCompany);
   $("#chgDate").onclick=function(){ var e=$("#dateEdit"); e.style.display=e.style.display==='none'?'block':'none'; };
   $("#bkDate").onchange=function(){ var v=$("#bkDate").value; if(v){ bookDate=new Date(v+'T00:00:00'); bookMoved=true; paintDate(); } };
   $("#addr").addEventListener('input', updateNearby);
@@ -1750,10 +1805,9 @@ function wireBinBody(){
   if(binMode==='drop'){
     const cl=$("#binCustList"); if(cl) cl.innerHTML=commAccounts().map(c=>'<option value="'+c.co+'">').join('')+QB_CUST.map(c=>'<option value="'+(c.first+(c.last?' '+c.last:''))+'">').join('');
     const al=$("#binAddrList"); if(al) al.innerHTML=commAccounts().map(c=>'<option value="'+c.addr+'">').join('')+QB_CUST.map(c=>'<option value="'+c.addr+'">').join('');
-    const cu=$("#binCust"); if(cu) cu.addEventListener('change',()=>{ const c=commAccounts().find(x=>x.co===cu.value.trim()); if(c){ if(!val('binAddr'))$("#binAddr").value=c.addr; if(!val('binPhone'))$("#binPhone").value=c.phone; if(!val('binEmail'))$("#binEmail").value=c.email; } });
+    // Customer / address / phone fill ONLY from an explicit pick (Wes) — the old change-to-autofill is gone.
     const tw=$("#binTown"); if(tw) tw.onchange=renderBinPair;
-    makeAuto('binCust', function(){ return commAccounts().map(function(c){return c.co;}).concat(QB_CUST.map(function(c){return c.first+(c.last?' '+c.last:'');})); });
-    makeAuto('binAddr', function(){ return commAccounts().map(function(c){return c.addr;}).concat(QB_CUST.map(function(c){return c.addr;})); });
+    try{ makeBinPick('binCust', binMatchName); makeBinPick('binAddr', binMatchAddr); makeBinPick('binPhone', binMatchPhone); }catch(e){}
     var _ba=document.getElementById('binAddr'); if(_ba)_ba.addEventListener('input',binTownAuto);
     var _bt=document.getElementById('binTown'); if(_bt)_bt.addEventListener('change',binSurUpdate);
     var _br=document.getElementById('binRoof'); if(_br)_br.addEventListener('click',function(){setTimeout(binSurUpdate,0);});
