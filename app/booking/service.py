@@ -83,9 +83,11 @@ def _is_price_line(ln: str) -> bool:
     return bool(_PRICE_LABEL.match(ln)) or ("$" in ln)
 
 
-# Internal/redundant lines always dropped from the calendar event (any lane): the event already
-# carries its own colour and its own date, and "recurring" is noise on it (Wes).
-_NOISE_LABEL = re.compile(r"^\s*(INITIAL COLOUR|RECURRING|DATE)\s*:", re.I)
+# Internal/redundant lines always dropped from the calendar event (any lane): CALENDAR HEADLINE just
+# repeats the event's own title; the event already carries its colour and its date; "recurring" is
+# noise on it (Wes). NOTE: the JOB TYPE line is KEPT — it becomes the first line so the crew see
+# "Collect on site" / "Invoiced" at the top.
+_NOISE_LABEL = re.compile(r"^\s*(CALENDAR HEADLINE|INITIAL COLOUR|RECURRING|DATE)\s*:", re.I)
 
 
 def _description(job: Job) -> str:
