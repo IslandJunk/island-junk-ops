@@ -95,17 +95,38 @@
   }
 
   // "8" -> "08:00", "1230" -> "12:30", "8-9" -> "08:00" (start). null if none.
-  function parseStart() {
-    var t = "";
-    try { t = (val("hardTime") || "") || (val("pickWin") || ""); } catch (e) {}
-    var digits = String(t).split(/[-–—]/)[0].replace(/[^0-9]/g, "");  // hyphen / en-dash / em-dash
-    if (!digits) return null;
+  // ---- Slot time (the calendar's positional start/end; the REAL time is the headline) ----
+  // The arrival-window options carry am/pm ("5:00–7:00 PM", "10:00 AM–12:00 PM"); we must honour it
+  // or a 5pm job lands at 5am and sorts to the TOP of the day's stack. A bare "hard time" has no
+  // am/pm, so the fixed workday decides: hours 1–6 are afternoon (1:30 -> 13:30), matching the board.
+  function _pad2(n) { return String(n).padStart(2, "0"); }
+  function _ampm(s) { var m = /(am|pm)/i.exec(String(s)); return m ? m[1].toLowerCase() : ""; }
+  function _hm(s) {
+    var d = String(s).replace(/[^0-9]/g, ""); if (!d) return null;
     var hh, mm;
-    if (digits.length <= 2) { hh = parseInt(digits, 10); mm = 0; }
-    else { hh = parseInt(digits.slice(0, digits.length - 2), 10); mm = parseInt(digits.slice(-2), 10); }
-    if (isNaN(hh)) return null;
-    return String(hh).padStart(2, "0") + ":" + String(mm || 0).padStart(2, "0");
+    if (d.length <= 2) { hh = parseInt(d, 10); mm = 0; }
+    else { hh = parseInt(d.slice(0, d.length - 2), 10); mm = parseInt(d.slice(-2), 10); }
+    return isNaN(hh) ? null : { hh: hh, mm: mm };
   }
+  function _to24(o, ap) { var h = o.hh % 12; if (ap === "pm") h += 12; return _pad2(h) + ":" + _pad2(o.mm); }
+  function parseWindow() {  // arrival window -> {start, end}, honouring am/pm on either side
+    var w = ""; try { w = val("pickWin") || ""; } catch (e) {}
+    if (!w) return null;
+    var parts = String(w).split(/[-–—]/);
+    var endAP = _ampm(parts[1] || ""), startAP = _ampm(parts[0] || "") || endAP;  // start inherits the end's am/pm
+    var s = _hm(parts[0] || ""), e = _hm(parts[1] || "");
+    if (!s) return null;
+    return { start: _to24(s, startAP), end: e ? _to24(e, endAP) : null };
+  }
+  function parseHard() {  // a single exact "hard time" (no am/pm) -> fixed-workday 24h, or null
+    var t = ""; try { t = val("hardTime") || ""; } catch (e) {}
+    var o = t ? _hm(String(t).split(/[-–—]/)[0]) : null;
+    if (!o) return null;
+    var h = (o.hh >= 1 && o.hh <= 6) ? o.hh + 12 : o.hh;   // 1–6 = afternoon
+    return _pad2(h) + ":" + _pad2(o.mm);
+  }
+  function parseStart() { return parseHard() || (parseWindow() || {}).start || null; }
+  function parseEnd() { return parseHard() ? null : ((parseWindow() || {}).end || null); }
 
   function anyVal() {
     for (var i = 0; i < arguments.length; i++) { try { var v = val(arguments[i]); if (v) return v; } catch (e) {} }
@@ -143,6 +164,7 @@
       customer_phone: val("phone") || null, customer_email: val("email") || null,
       address: anyVal("addr", "cbAddr", "siteAddr", "binAddr") || null,
       time_start: parseStart(),
+      time_end: parseEnd(),
       headline: headlineFromBody(),
       notes: (document.querySelector("#mBody") || {}).textContent || null,
     };
