@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
 **2026-07-21 (⭐ RESUME POINT — booking overhaul: pickers + scannable popup + living-record event + manual text button + crew notes/photos; NEXT: create-on-calendar flow)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`243185f`** (code), migration head
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`4a3932e`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -50,8 +50,10 @@
 >    "▶ Finish in the app →" link into it; tapping opens the booking screen pre-filled from the event; completing fills
 >    that SAME event (no duplicate) + links the job. New calendar write (to a hand-made event) — TEST only during the
 >    build. Confirmed with Wes.
-> Then the remaining booking backlog: **C.** quick-pick search · **D.** Proline location save · **E.** "Job ready"
-> note/edit step · **F.** AM/PM slot cosmetic. Then **Dropbox Phase 1c** — repoint the photo STORE (Postgres
+> Then the remaining booking backlog: **C.** quick-pick search · **D.** Proline location save (looks to already work —
+> the New-Listing save fired on Wes's test; confirm) · **E.** "Job ready" note/edit step. (**F. AM/PM slot bug FIXED**
+> `4a3932e` — PM arrival windows were landing at AM and sorting to the top of the stack; now honours am/pm + sends the
+> real end time.) Then **Dropbox Phase 1c** — repoint the photo STORE (Postgres
 > `job_photo` → the Dropbox job folder), which ALSO makes the crew photos show as in-app thumbnails; then Phase 2/3.
 
 **2026-07-20 (booking 422 fixed + LIVE — Wes then booked to prove the calendar+Dropbox chain; DONE, see above)** —
