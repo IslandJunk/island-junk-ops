@@ -884,10 +884,19 @@ function escB(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;',
    Wrapping in <span> is purely visual — #mBody.textContent still returns the EXACT same lines the
    booking bridge parses (CALENDAR HEADLINE + the notes field), so the write path is untouched. */
 function prettifyReview(text){
-  return String(text==null?'':text).split('\n').map(function(line){
+  // Lines that are internal/redundant on the review — the same ones stripped from the calendar event
+  // (CALENDAR HEADLINE repeats the title; colour/date/recurring are noise). We keep them in the DOM so
+  // #mBody.textContent still carries the headline for the booking bridge, but hide them from view (Wes).
+  var NOISE=/^\s*(CALENDAR HEADLINE|INITIAL COLOUR|RECURRING|DATE)\s*:/i;
+  var vis=[], hid=[];
+  String(text==null?'':text).split('\n').forEach(function(line){ (NOISE.test(line)?hid:vis).push(line); });
+  function fmt(line){
     var m=line.match(/^(\s*)([A-Z][A-Z0-9 \/&.\-]*[A-Z]):([\s\S]*)$/);
     return m ? escB(m[1])+'<span class="rvlab">'+escB(m[2])+':</span>'+escB(m[3]) : escB(line);
-  }).join('\n');
+  }
+  var html=vis.map(fmt).join('\n');
+  if(hid.length) html+='<span style="display:none">\n'+hid.map(escB).join('\n')+'</span>';
+  return html;
 }
 function seedDB(){ return COMPANIES.map(c=>{ const co={id:uid(),nm:c.nm,addr:c.addr||'',email:'',contact:'',phone:'',src:'qb',groups:[]};
   if(c.groups){ for(const g in c.groups){ co.groups.push({id:uid(),nm:g,bldgs:c.groups[g].map(b=>({id:uid(),n:b.n,a:b.a||'',email:'',contact:'',phone:''}))}); } }
