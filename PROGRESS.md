@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — Phase 1b closed; booking pickers live on ALL lanes + "Job ready" popup scannable; NEXT: rest of booking backlog)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`17afb07`** (code), migration head
+**2026-07-21 (⭐ RESUME POINT — pickers all lanes + scannable popup + calendar event is the job's living record; NEXT: show crew the notes/photos, then create-on-calendar flow)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`d8a8b0e`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -26,15 +26,25 @@
   proportional body font with each ALL-CAPS `LABEL:` bolded (`prettifyReview` + `.rvlab` on the six summary builders).
   **Presentation-only:** `#mBody.textContent` is byte-identical, so booking-bridge's `headlineFromBody()` + notes are
   untouched (round-trip verified incl. `& < > "` escaping). Plain-text modals (confirmation/missing/info) unchanged.
+- **Calendar event = the job's LIVING RECORD (`d8a8b0e`, deployed):** at booking the app now writes the manager's FULL
+  booking detail onto the event + a `NOTES:` section + the Dropbox link, and DROPS the cryptic `[app job <uuid>]` tag
+  (events link to jobs by `gcal_event_id` — the only thing day_board/sync match on; the tag was write-only). **Pricing
+  rule (§12):** residential `collect` keeps the price on the event (crew collect on site & see it); commercial/invoiced
+  + bins strip every price line (a price label OR any `$`) so the crew never see a total. **Read-back:**
+  `calendar_read.manager_notes_from_desc()` parses text the manager types under `NOTES:` on Google Calendar, and
+  `day_board._job_view` now surfaces `manager_notes` + `photos_link` to the crew. `service.py::_description`
+  rewritten; server-side fully tested (price kept vs stripped, NOTES round-trip empty→None/edited→text, no tag).
 
-> ▶▶ IMMEDIATE NEXT STEP — rest of the booking backlog (Wes's requests, all one screen), then Dropbox Phase 1c:
-> 2. **Quick-pick**: search-by-name instead of the giant scroll list.
-> 3. **Commercial (Proline)**: pick a location → auto-fill its address + save a NEW location per company (persist).
-> 4. **"Job ready" popup — the note/edit step** (scannable half done `17afb07`; add a manager note + inline edit,
->    best built with the running UI so the layout can be seen).
-> 5. Minor: afternoon arrival windows parse to an AM *slot* time (5 PM → 05:00). Cosmetic (slot is positional).
-> Then **Dropbox Phase 1c** — repoint the photo STORE from Postgres `job_photo` → the Dropbox job folder (now
-> unblocked by 1b); then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage → bin folder + alert).
+> ▶▶ IMMEDIATE NEXT STEP — finish the "living record" loop, then Wes's create-on-calendar flow:
+> A. **Show the crew the manager's notes + photos.** The data is already in `day_board._job_view` (`manager_notes`,
+>    `photos_link`) — the Day Board / Truck Hub **UI just needs to render it** (frontend; Wes's ask). Not done yet.
+> B. **Create-on-calendar → "finish in the app"** (Wes's "backwards" booking): the app spots a calendar event with
+>    NO linked job, drops a "▶ Finish in the app →" link into it; tapping opens the booking screen pre-filled from the
+>    event; completing fills that SAME event (no duplicate) + links the job. New calendar write (to a hand-made event)
+>    — TEST only during the build. Confirmed with Wes; build after A.
+> Then the remaining booking backlog: **C.** quick-pick search · **D.** Proline location save · **E.** "Job ready"
+> note/edit step · **F.** AM/PM slot cosmetic. Then **Dropbox Phase 1c** — repoint the photo STORE (Postgres
+> `job_photo` → the Dropbox job folder), which ALSO makes A's photos show as in-app thumbnails; then Phase 2/3.
 
 **2026-07-20 (booking 422 fixed + LIVE — Wes then booked to prove the calendar+Dropbox chain; DONE, see above)** —
 Everything below is done, committed, and deployed. Repo clean, HEAD **`c32d153`**, migration head
