@@ -1523,14 +1523,16 @@ function invoicedFlowHTML(){
 }
 function qbFindCo(v){ return commFindCo(v); }
 function applyQBco(c, force){
-  if(force){ // explicit pick from a makeCoPick dropdown — set the company + canonical account values
+  // The address field is the JOB LOCATION (where the crew go) — NOT the account's billing address,
+  // which stays on file. So picking a known company fills the CONTACT/billing details but leaves the
+  // address for the manager to enter the job site (or pick a saved location). (Wes)
+  if(force){ // explicit pick from a makeCoPick dropdown — set the company + canonical contact values
     if($("#company")) $("#company").value=c.co||'';
-    $("#contact").value=c.contact||''; $("#phone").value=c.phone||''; $("#email").value=c.email||''; $("#addr").value=c.addr||'';
+    $("#contact").value=c.contact||''; $("#phone").value=c.phone||''; $("#email").value=c.email||'';
   } else {
     if(!$("#contact").value)$("#contact").value=c.contact;
     if(!$("#phone").value)$("#phone").value=c.phone;
     if(!$("#email").value)$("#email").value=c.email;
-    if(!$("#addr").value)$("#addr").value=c.addr;
   }
   var aw=$("#acctWrap"), al=$("#acctList");
   var accts=(c.accounts||[]).filter(function(a){return a&&String(a).trim();});
@@ -1672,13 +1674,17 @@ function invoicedCreate(){
   var L=[];
   L.push("CALENDAR HEADLINE: "+buildHeadline({win:val('pickWin'),addr:val('addr'),load:invLoadShort(),tag:'Invoice'}));
   L.push("JOB TYPE: Invoiced — billed later  (→ Commercial Form)");
-  L.push("CUSTOMER: "+val('company')+(acctOn&&val('acctPick')? "  · "+val('acctPick'):"")+"  · "+val('contact'));
+  L.push("COMPANY: "+val('company')+"  · "+val('contact'));
   L.push("CONTACT: "+val('phone')+" · "+val('email'));
   if(pom==='none') L.push("PO #: not required for this account");
   else if(pom==='have') L.push("PO #: "+(val('po')||"—"));
   else { var _pw=poWhen(); L.push("PO #: ⚠ STILL NEEDED — "+(_pw==='first'?"get it before invoicing":"chase it later")+(val('po')?(" (have: "+val('po')+")"):"")); L.push("   → flagged: PO# still needed (will show in the Manager Hub + Owner Hub + on the invoice queue)"); poRecordNeeded({company:val('company'),account:(acctOn&&val('acctPick'))||"",booker:val('contact'),phone:val('phone'),addr:val('addr'),date:fmtDate(bookDate),when:_pw,headline:buildHeadline({win:val('pickWin'),addr:val('addr'),load:invLoadShort(),tag:'Invoice'})}); }
-  L.push("ADDRESS: "+val('addr'));
-  var _acct=coByName(pmListingCompany||val('company')); if(_acct && _acct.addr) L.push("BILL TO (account): "+_acct.addr);
+  L.push("JOB LOCATION: "+((acctOn&&val('acctPick'))? val('acctPick')+" — ":"")+val('addr'));
+  // Billing address stays on file for a company we know; it only rides onto the calendar for a NEW
+  // company (so it's captured) — per Wes. Known companies show just company + job location.
+  var _known=!!(commFindCo(val('company'))||coByName(pmListingCompany||val('company')));
+  if(!_known) L.push("NEW COMPANY — \""+val('company')+"\" isn't on file yet; the address above is captured, add it to the system");
+  var _acct=coByName(pmListingCompany||val('company'));
   if(_acct && _acct.reqShots && _acct.reqShots.length) L.push("REQUIRED PHOTOS (account): "+_acct.reqShots.join(", "));
   if(_newL) L.push("NEW LISTING: \""+val('addr')+"\" saved under "+_newL+" \u2014 one-tap next time");
   L.push("DATE: "+fmtDate(bookDate)+(bookMoved?"  (moved to cluster with a nearby job)":"  (calendar day you tapped)"));
