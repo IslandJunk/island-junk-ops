@@ -224,12 +224,43 @@
         btn.textContent = "✓ Booked (" + lane() + ") — event " + (j.gcal_event_id || "?") + " on TEST";
         btn.style.background = "#3CA03C";
         uploadBookingPhotos(j && j.id, btn);   // best-effort: file the attached photos onto the job
+        addTextBtn(j && j.id);                 // offer a manual "text the customer" button (never auto-sent)
       }).catch(function (e) {
         btn.disabled = false;
         btn.textContent = (e && e.message === "auth") ? "Log in as a manager first" : "Error — retry";
       });
     };
     close.parentNode.insertBefore(btn, close);
+  }
+
+  // After a booking succeeds, offer a MANUAL "text the customer" button beside Close (Wes: the
+  // booking confirmation is never auto-sent — the manager sends it on demand when he wants to).
+  function addTextBtn(jobId) {
+    if (!jobId) return;
+    var modal = document.querySelector("#ovl .modal");
+    if (!modal || modal.querySelector("#ijTextBtn")) return;
+    var close = modal.querySelector("#mClose"); if (!close) return;
+    var tb = document.createElement("button");
+    tb.id = "ijTextBtn"; tb.className = "close";
+    tb.style.cssText = "background:#E8A317;color:#fff;margin-right:8px";
+    tb.textContent = "Text customer the booking";
+    tb.onclick = function () {
+      tb.disabled = true; tb.textContent = "Texting…";
+      var d = (typeof bookDate !== "undefined") ? bookDate : new Date();
+      fetch("/booking/" + encodeURIComponent(jobId) + "/text-confirmation", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ on_date: ymd(d) }),
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      }).then(function (res) {
+        var j = res.j || {};
+        if (res.ok && j.sent) { tb.textContent = "✓ Text sent to customer"; tb.style.background = "#3CA03C"; }
+        else if (res.ok) { tb.disabled = false; tb.textContent = "Not sent: " + (j.detail || "?"); tb.style.background = "#C0392B"; }
+        else { tb.disabled = false; tb.textContent = "Text failed — retry"; tb.style.background = "#C0392B"; }
+      }).catch(function () { tb.disabled = false; tb.textContent = "Text failed — retry"; });
+    };
+    close.parentNode.insertBefore(tb, close);
   }
 
   var ovl = document.querySelector("#ovl");

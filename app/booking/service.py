@@ -56,20 +56,18 @@ def _confirm_when(on_date: date, ts: time | None, te: time | None) -> str:
     return day
 
 
-def _send_booking_confirmation(db: DbSession, job: Job, on_date: date) -> None:
-    """Text the customer a booking confirmation from the updates line (best-effort, dry-run
-    until Twilio creds). Never fails the booking — a texting error is swallowed."""
+def send_confirmation_text(db: DbSession, job: Job, on_date: date) -> dict:
+    """Send the customer a booking-confirmation text from the updates line, ON DEMAND — the manager
+    taps the button on the booking screen (never automatic, per Wes). Returns the SMS send result
+    ({sent, dry_run, skipped, …}); raises SmsGuardError on a hard guard failure so the UI shows it."""
     if not job.customer_phone:
-        return
-    try:
-        from app.sms import service as sms_service, templates as sms_templates
-        body = sms_templates.render(db, job.brand, "booking_confirm", {
-            "name": job.customer_name,
-            "when": _confirm_when(on_date, job.time_start, job.time_end),
-            "address": job.address})
-        sms_service.send(db, brand=job.brand, to=job.customer_phone, body=body, kind="booking_confirm")
-    except Exception:
-        pass
+        return {"sent": False, "skipped": "no_phone"}
+    from app.sms import service as sms_service, templates as sms_templates
+    body = sms_templates.render(db, job.brand, "booking_confirm", {
+        "name": job.customer_name,
+        "when": _confirm_when(on_date, job.time_start, job.time_end),
+        "address": job.address})
+    return sms_service.send(db, brand=job.brand, to=job.customer_phone, body=body, kind="booking_confirm")
 
 
 # Summary lines that reveal a price. Stripped from the calendar event on lanes whose crew must
@@ -169,5 +167,6 @@ def create_booking(
     # not at booking/drop — so it's created via POST /reminders/cc-charge at invoice time.
     db.commit()
     db.refresh(job)
-    _send_booking_confirmation(db, job, on_date)
+    # The customer booking-confirmation text is NOT sent automatically (Wes): the manager sends it
+    # on demand from the booking screen → POST /booking/{id}/text-confirmation → send_confirmation_text.
     return job
