@@ -83,6 +83,11 @@ def _is_price_line(ln: str) -> bool:
     return bool(_PRICE_LABEL.match(ln)) or ("$" in ln)
 
 
+# Internal/redundant lines always dropped from the calendar event (any lane): the event already
+# carries its own colour and its own date, and "recurring" is noise on it (Wes).
+_NOISE_LABEL = re.compile(r"^\s*(INITIAL COLOUR|RECURRING|DATE)\s*:", re.I)
+
+
 def _description(job: Job) -> str:
     """The calendar event body IS the job's living record: the manager's full booking detail, a
     `NOTES:` section they can fill in on Google Calendar afterward (read back onto the job so the
@@ -94,6 +99,8 @@ def _description(job: Job) -> str:
     lines: list[str] = []
     if notes:
         for ln in notes.split("\n"):
+            if _NOISE_LABEL.match(ln):
+                continue   # colour + date are the event's own; recurring is noise here
             if not show_price and _is_price_line(ln):
                 continue
             lines.append(ln)
