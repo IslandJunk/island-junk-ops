@@ -35,8 +35,9 @@
           type: typeFor(j),
           bin: j.booking_lane === "bins" || undefined,
           status: "scheduled",
-          office: j.scope || "",
+          office: [j.scope, j.manager_notes].filter(Boolean).join("\n"),   // scope + the manager's calendar NOTES → crew office notes
           job_id: j.job_id || null,        // linked Job — the crew fetch reference photos by this
+          photos_link: j.photos_link || "",   // the job's Dropbox folder (manager adds photos via the calendar link)
         });
       });
     });
@@ -192,6 +193,21 @@
         wrap.appendChild(lbl); wrap.appendChild(strip);
       }).catch(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); });
   }
+  // The job's Dropbox photo folder (§10): the manager drops photos into it via the calendar link;
+  // give the crew a tap-through to the SAME folder here. Silent when the job has no folder link.
+  function injectPhotosFolder() {
+    var cur = (typeof CURRENT !== "undefined") ? CURRENT : null;
+    var ow = document.getElementById("owBtn");
+    if (!cur || !cur.photos_link || !ow || document.getElementById("ijFolderWrap")) return;
+    var wrap = document.createElement("div");
+    wrap.id = "ijFolderWrap"; wrap.style.cssText = "margin:4px 0 12px";
+    var a = document.createElement("a");
+    a.href = cur.photos_link; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "📁 Open the job's photo folder";
+    a.style.cssText = "display:inline-block;font-weight:700;font-size:13px;color:#F05014;text-decoration:none;border:1px solid #d8d3cc;border-radius:10px;padding:8px 12px";
+    wrap.appendChild(a);
+    ow.parentNode.insertBefore(wrap, ow);   // above the "on our way" button, near the reference photos
+  }
   function wireNextEta() {
     if (typeof openStop !== "function") return;
     var _open = openStop;
@@ -199,6 +215,7 @@
       var r = _open.apply(this, arguments);
       try { injectEta(); } catch (e) {}
       try { injectPhotos(); } catch (e) {}
+      try { injectPhotosFolder(); } catch (e) {}
       return r;
     };
   }
