@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
 **2026-07-21 (⭐ RESUME POINT — pickers all lanes + scannable popup + calendar event is the job's living record; NEXT: show crew the notes/photos, then create-on-calendar flow)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`b08bfd2`** (code), migration head
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`b44378b`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -29,7 +29,8 @@
 - **Calendar event = the job's LIVING RECORD (`d8a8b0e`, deployed):** at booking the app now writes the manager's FULL
   booking detail onto the event + a `NOTES:` section + the Dropbox link, and DROPS the cryptic `[app job <uuid>]` tag
   (events link to jobs by `gcal_event_id` — the only thing day_board/sync match on; the tag was write-only) PLUS the
-  internal `INITIAL COLOUR` / `DATE` / `RECURRING` lines (`_NOISE_LABEL`, `b08bfd2` — redundant on the event). **Pricing
+  internal `CALENDAR HEADLINE` (repeats the title) / `INITIAL COLOUR` / `DATE` / `RECURRING` lines (`_NOISE_LABEL`,
+  `b44378b`). The `JOB TYPE` line is KEPT and now LEADS, so the crew see "Collect on site" / "Invoiced" on top. **Pricing
   rule (§12):** residential `collect` keeps the price on the event (crew collect on site & see it); commercial/invoiced
   + bins strip every price line (a price label OR any `$`) so the crew never see a total. **Read-back:**
   `calendar_read.manager_notes_from_desc()` parses text the manager types under `NOTES:` on Google Calendar, and
