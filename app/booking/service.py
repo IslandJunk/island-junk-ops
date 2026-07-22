@@ -7,6 +7,7 @@ clean standard-format headline (the authoritative time). Every new job starts
 """
 from __future__ import annotations
 
+import re
 from datetime import date, time
 from decimal import Decimal
 
@@ -71,24 +72,44 @@ def _send_booking_confirmation(db: DbSession, job: Job, on_date: date) -> None:
         pass
 
 
+# Summary lines that reveal a price. Stripped from the calendar event on lanes whose crew must
+# NOT see pricing (commercial/invoiced, bins) — CLAUDE.md §12. Residential hand-load (the collect
+# lane) is exempt: that crew collects on site and is shown the price. (Anything with a "$" is also
+# treated as a price line, belt-and-suspenders.)
+_PRICE_LABEL = re.compile(r"^\s*(PRICE|EST|ESTIMATE|SUBTOTAL|TOTAL|GST|CARD FEE|DUMP FEE|CREW HEADS-UP / EST)\b", re.I)
+
+
+def _is_price_line(ln: str) -> bool:
+    return bool(_PRICE_LABEL.match(ln)) or ("$" in ln)
+
+
 def _description(job: Job) -> str:
-    lines = [f"{job.booking_lane.value.upper()} booking"]
-    if job.customer_name:
-        lines.append(f"Customer: {job.customer_name}")
-    if job.customer_phone:
-        lines.append(f"Phone: {job.customer_phone}")
-    if job.address:
-        lines.append(f"Address: {job.address}")
-    if job.scope:
-        lines.append(f"Scope: {job.scope}")
-    if job.est_price is not None:
-        lines.append(f"Est: ${job.est_price}")
-    if job.crew:
-        lines.append(f"Crew: {', '.join(job.crew)}")
+    """The calendar event body IS the job's living record: the manager's full booking detail, a
+    `NOTES:` section they can fill in on Google Calendar afterward (read back onto the job so the
+    crew see it), and the Dropbox photos link. The detail mirrors the review summary on job.notes;
+    price lines are dropped for lanes whose crew must not see pricing. No machine tag — events link
+    to their job by the Google event id (gcal_event_id), so nothing cryptic is shown."""
+    notes = (job.notes or "").strip()
+    show_price = job.booking_lane == BookingLane.collect   # residential collect: crew see pricing
+    lines: list[str] = []
+    if notes:
+        for ln in notes.split("\n"):
+            if not show_price and _is_price_line(ln):
+                continue
+            lines.append(ln)
+    else:   # fallback for events not created from the app's review summary
+        lines.append(f"{job.booking_lane.value.upper()} booking")
+        if job.customer_name:
+            lines.append(f"Customer: {job.customer_name}")
+        if job.customer_phone:
+            lines.append(f"Phone: {job.customer_phone}")
+        if job.address:
+            lines.append(f"Address: {job.address}")
     link = ((job.details or {}).get("dropbox") or {}).get("link")
-    if link:
-        lines.append(f"Photos: {link}")   # search the job in Calendar -> click -> the job's folder
-    lines.append(f"[app job {job.id}]")
+    if link and "Photos:" not in "\n".join(lines):
+        lines.append(f"Photos: {link}")   # tap in Calendar -> the job's photo folder
+    lines.append("")
+    lines.append("NOTES:")   # manager adds notes here on Calendar; the crew see them on the job
     return "\n".join(lines)
 
 

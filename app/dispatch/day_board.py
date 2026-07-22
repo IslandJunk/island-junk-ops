@@ -18,7 +18,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from app.dispatch.calendar_read import is_manager_note, parse_headline_time
+from app.dispatch.calendar_read import is_manager_note, manager_notes_from_desc, parse_headline_time
 from app.integrations import gcal
 from app.models.colour_map import ColourMap
 from app.models.enums import Brand, ColourKind
@@ -43,6 +43,9 @@ def _job_view(ev: dict, colour: ColourMap | None, job: Job | None) -> dict:
         "booking_lane": (job.booking_lane.value if job else None),
         "scope": (job.scope if job else None),
         "job_id": (str(job.id) if job else None),   # crew fetch reference photos by this
+        # Manager's post-booking additions on the calendar event, surfaced to the crew:
+        "manager_notes": manager_notes_from_desc(ev.get("description")),   # typed under NOTES: on Calendar
+        "photos_link": ((job.details or {}).get("dropbox") or {}).get("link") if job else None,
     }
 
 

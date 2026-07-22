@@ -72,3 +72,16 @@ def parse_headline_time(headline: str | None) -> tuple[time | None, time | None]
         return (None, None)
     end = _clock(m.group(2)) if m.group(2) else None
     return (start, end)
+
+
+def manager_notes_from_desc(description: str | None) -> str | None:
+    """Free notes the manager typed under the `NOTES:` line of a calendar event (after booking).
+
+    The app writes a trailing `NOTES:` marker into every event it creates (booking/service.py);
+    on Google Calendar the manager can add text below it, and the Day Board reads it back onto the
+    job so the crew see it. Returns the text after the LAST `NOTES:` marker, or None if still empty.
+    """
+    if not description or "NOTES:" not in description:
+        return None
+    after = description.rsplit("NOTES:", 1)[-1].strip()
+    return after or None
