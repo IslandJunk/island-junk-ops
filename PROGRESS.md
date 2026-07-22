@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — pickers all lanes + scannable popup + calendar event is the job's living record; NEXT: show crew the notes/photos, then create-on-calendar flow)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`b44378b`** (code), migration head
+**2026-07-21 (⭐ RESUME POINT — booking overhaul: pickers + scannable popup + living-record event + manual text button + crew notes/photos; NEXT: create-on-calendar flow)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`243185f`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -36,17 +36,23 @@
   `calendar_read.manager_notes_from_desc()` parses text the manager types under `NOTES:` on Google Calendar, and
   `day_board._job_view` now surfaces `manager_notes` + `photos_link` to the crew. `service.py::_description`
   rewritten; server-side fully tested (price kept vs stripped, NOTES round-trip empty→None/edited→text, no tag).
+- **Booking confirmation text is now MANUAL (`7131bec`, deployed):** the app no longer auto-texts the customer on
+  booking (Wes got an unwanted auto-text on a test booking). `create_booking` no longer sends; `POST
+  /booking/{id}/text-confirmation` (→ `service.send_confirmation_text`) sends on demand, and after a booking succeeds
+  `booking-bridge.js` shows a "Text customer the booking" button beside Close (surfaces sent / dry-run / skipped).
+- **Crew see the manager's NOTES + photo folder (`243185f`, deployed — "A" DONE):** `day-board-bridge.js` folds
+  `manager_notes` into the stop's existing office-notes display and injects a "📁 Open the job's photo folder" link
+  (from `photos_link`). So the manager types under `NOTES:` on the calendar → the crew see it on the job; the manager
+  drops photos in the folder via the calendar link → the crew tap through to the same folder. (Needs a live check.)
 
-> ▶▶ IMMEDIATE NEXT STEP — finish the "living record" loop, then Wes's create-on-calendar flow:
-> A. **Show the crew the manager's notes + photos.** The data is already in `day_board._job_view` (`manager_notes`,
->    `photos_link`) — the Day Board / Truck Hub **UI just needs to render it** (frontend; Wes's ask). Not done yet.
-> B. **Create-on-calendar → "finish in the app"** (Wes's "backwards" booking): the app spots a calendar event with
->    NO linked job, drops a "▶ Finish in the app →" link into it; tapping opens the booking screen pre-filled from the
->    event; completing fills that SAME event (no duplicate) + links the job. New calendar write (to a hand-made event)
->    — TEST only during the build. Confirmed with Wes; build after A.
+> ▶▶ IMMEDIATE NEXT STEP — Wes's create-on-calendar flow (his "backwards" booking), then the rest of the backlog:
+> B. **Create-on-calendar → "finish in the app":** the app spots a calendar event with NO linked job, drops a
+>    "▶ Finish in the app →" link into it; tapping opens the booking screen pre-filled from the event; completing fills
+>    that SAME event (no duplicate) + links the job. New calendar write (to a hand-made event) — TEST only during the
+>    build. Confirmed with Wes.
 > Then the remaining booking backlog: **C.** quick-pick search · **D.** Proline location save · **E.** "Job ready"
 > note/edit step · **F.** AM/PM slot cosmetic. Then **Dropbox Phase 1c** — repoint the photo STORE (Postgres
-> `job_photo` → the Dropbox job folder), which ALSO makes A's photos show as in-app thumbnails; then Phase 2/3.
+> `job_photo` → the Dropbox job folder), which ALSO makes the crew photos show as in-app thumbnails; then Phase 2/3.
 
 **2026-07-20 (booking 422 fixed + LIVE — Wes then booked to prove the calendar+Dropbox chain; DONE, see above)** —
 Everything below is done, committed, and deployed. Repo clean, HEAD **`c32d153`**, migration head
