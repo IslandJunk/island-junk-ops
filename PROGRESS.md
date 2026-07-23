@@ -1,8 +1,25 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-23 (⭐ RESUME POINT — backwards booking COMPLETE + backlog E DONE: "Job ready" crew-note / edit step, plus a real second-booking bug fixed; NEXT: saved commercial-location addresses, then Dropbox 1c)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`2b62adc`** (code), migration head
-**`d7a3f9c2e1b8`** (unchanged — no migration this session), prod at `island-junk-ops.onrender.com`.
+**2026-07-23 (⭐ RESUME POINT — BOOKING BACKLOG DONE: backwards booking + E ("Job ready" crew-note/edit + second-booking bug fixed) + D (commercial saved locations auto-fill their address); NEXT: Dropbox 1c)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`ffa52b7`** (code), migration head
+**`e3b1c7a4d9f2`** (NEW — `company_customer.account_addrs`; already applied to prod, so the Render deploy's migrate step
+is a no-op), prod at `island-junk-ops.onrender.com`.
+
+- **NEW — commercial SAVED LOCATIONS (`ffa52b7`; migration `e3b1c7a4d9f2`, NEW HEAD, already applied to prod) — backlog D
+  DONE.** Commercial accounts carried `accounts[]` = location NAMES only, so the manager retyped the job address on every
+  booking, even for sites we book constantly. New **`company_customer.account_addrs`** JSONB `{location -> that site's job
+  address}`, deliberately **ADDITIVE** to `accounts` (which stays the plain name list every other reader — datalist, PO
+  records, invoice queue — uses): no data migration, the 824 existing rows just default to `{}`.
+  **Picking a saved location auto-fills that site's address**; it never clobbers an address the manager typed himself
+  (switching between saved locations DOES update it). **A site booked for the first time is remembered** via
+  `POST /customers/company-location` — appends to `accounts` only if new, sets `account_addrs[location]`, touches no other
+  site, and **never invents a company** (an unknown name is reported back, not created — auto-creating new accounts is
+  still deliberately NOT done). The address stays the **JOB LOCATION**, so billing never leaks into it (the D bug stays
+  fixed). `applyQBco` is **wrapped, not edited** — the approved prototype is untouched. `apply_company_customers` now
+  **MERGES** `acctAddrs` instead of replacing, so a screen that only knows one location can't wipe a company's other sites.
+  Verified: migration linear + applied (824 rows intact) · 14 backend cases through the real HTTP endpoint on a throwaway
+  company (created + deleted) · 12 DOM cases (fill, switch, case-insensitive, unknown site left alone, manual address never
+  clobbered, POST body, no pointless POST, wrong lane silent) · esprima-clean.
 
 - **NEW — "Job ready" popup: crew note + edit step, and the popup now RESETS between bookings (`2b62adc`; deployed, no
   migration) — backlog E DONE.** The popup was already scannable; this is the note/edit half.
@@ -128,16 +145,17 @@
   now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
   were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — backwards booking + backlog **E** are done and deployed. Next: **saved commercial-location
-> addresses** — the remaining half of D: picking a saved company site should auto-fill THAT site's address, and a brand-new
-> site should be captured as a saved location on the account (today `applyQBco` fills contact/billing only, so the job
-> address is retyped every time; the "NEW COMPANY" line only captures unknown companies). Then **tune the name auto-fill**
-> if Wes wants it smarter than copying off the "From the calendar" panel. (**C.** quick-pick is largely covered by the
-> existing search-as-you-type pickers.) Then **Dropbox Phase 1c** — repoint the photo STORE (Postgres `job_photo` → the
-> Dropbox job folder), which ALSO makes the crew photos show as in-app thumbnails; then Phase 2/3.
-> **Live-check when convenient:** book a job → the "Job ready" popup now has a **"Note for the crew"** box; type one →
-> Book it → the note should appear under `NOTES:` on the calendar event AND on the crew's Day Board stop. Then book a
-> SECOND job **without reloading** — the Book-it button must be live again (that was broken before `2b62adc`).
+> ▶▶ IMMEDIATE NEXT STEP — **the booking backlog is DONE** (backwards booking, E, D). Next: **Dropbox Phase 1c** — repoint
+> the photo STORE from Postgres `job_photo` → the Dropbox job folder, which ALSO makes the crew photos show as in-app
+> thumbnails; then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage → bin folder + alert). Small optional
+> leftovers, only if Wes asks: **tune the name auto-fill** (smarter than copying off the "From the calendar" panel) ·
+> **auto-create a commercial account** for a company that isn't on file yet (today the location save refuses an unknown
+> company by design rather than inventing one) · (**C.** quick-pick is largely covered by the existing pickers).
+> **Live-checks when convenient** — (1) book a job → the "Job ready" popup has a **"Note for the crew"** box; type one →
+> Book it → it should appear under `NOTES:` on the calendar event AND on the crew's Day Board stop; then book a SECOND job
+> **without reloading** — the Book-it button must be live again (broken before `2b62adc`). (2) commercial job → pick a
+> company → pick a saved location: the address should fill itself; book a job at a NEW site, then book there again and the
+> address should now fill without typing.
 > (**D. commercial
 > COMPANY vs JOB-LOCATION split DONE** `a9b4ddd` — picking a known company was dumping its BILLING address into the
 > address field; now applyQBco fills contact/billing only, the address is the JOB LOCATION, billing stays off the
