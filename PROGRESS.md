@@ -1,8 +1,25 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-23 (⭐ RESUME POINT — backwards booking + Day-Board Finish button + Res/Comm prompt & auto-fill + "not assigned"/`#`-notes views all DONE & deployed; NEXT: Wes live-spins the backwards-booking flow, then rest of backlog / Dropbox 1c)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`f77019b`** (code), migration head
+**2026-07-23 (⭐ RESUME POINT — backwards-booking chain VERIFIED end-to-end + Wes LIVE-SPUN it (address carries over ✓); NEW "From the calendar" side panel copies the event's name/phone/notes beside the booking form; NEXT: background finish-link poll, then rest of backlog / Dropbox 1c)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`e117c13`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
+
+- **Backwards booking LIVE-SPUN by Wes — the address carries over from the calendar Location field ✓.** Before the spin the
+  whole chain was re-verified statically (browser tooling hangs on the booking prototype → esprima + Python logic mirrors): the
+  #1 guardrail HOLDS — every `gcal` read/write (incl. `_stamp_finish_links`'s `update_event`) routes through
+  `_assert_test_calendar`, so the two live calendars can NEVER be written; `update_event` builds its PATCH body CONDITIONALLY so
+  a description-only finish-stamp never blanks the manager's title/colour; completion PATCHes the SAME event via `into_event_id`
+  with a 409 dup-guard; both Day-Board entry points (inline stop button + "Not assigned yet" panel) and the in-calendar link all
+  open `/app/new-booking?event=<real-id>`.
+- **NEW — "From the calendar" side panel (`e117c13`, `booking-bridge.js`; deployed):** completing a hand-made event now shows a
+  persistent panel with the event's **phone (auto-extracted via regex), name/notes, title, address, date** — each with a **Copy**
+  button — so the manager transfers what he typed on the calendar into the form WITHOUT opening the job on another device (Wes's
+  ask, screenshot-guided; the free text isn't auto-parseable into name-vs-scope, so it's shown verbatim for copying, phone
+  isolated). Replaces the old noisy top sticky-bar. **Fixed to the right margin on wide screens (≥1340px — verified it lands in
+  Wes's red-box zone at x≈1284–1656, 54px clear of the form), stacks full-width above the form on phones/tablets**
+  (`buildCalPanel` inserts before `#flowView`). Also **strips the stamped "▶ Finish this booking…" link out of the notes**
+  everywhere shown (Res/Comm prompt + panel) — that URL was leaking into the notes. Verified: esprima-clean, phone-extract +
+  finish-strip logic unit-tested (7 cases), both layouts confirmed live in a standalone harness via `read_page` + computed-style.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
   residential job via the app → real green "✓ Booked — event `kluspr5nq2pjp5enqp5cec2qbg` on TEST". Read the event
@@ -81,12 +98,14 @@
   now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
   were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — **live-spin the backwards booking end-to-end:** make a TEST-cal event WITH the address in the
-> Google Calendar **Location** field → open the Day Board (`/app/day-board`) → switch to its day (that stamps the finish
-> link + populates "Not assigned yet") → tap **Finish this booking** (on the stop or in the "Not assigned yet" panel) →
-> Res/Comm prompt → complete → confirm the SAME event fills (no duplicate) with the address carried over. THEN the rest of
-> the backlog: **C.** quick-pick search · **E.** "Job ready" note/edit step · tune the name auto-fill if Wes wants ·
-> optional: a background poll so the finish-link stamps without needing a board view · saved-commercial-location addresses.
+> ▶▶ IMMEDIATE NEXT STEP — **build the background finish-link poll** (Wes's pick). Today `_stamp_finish_links`
+> (`day_board.read_day`) only stamps the "▶ Finish this booking" link onto a hand-made event when someone OPENS that day's
+> Day Board. The poll stamps it hands-off: mirror the QuickBooks auto-sync pattern (`app/quickbooks/scheduler.py` — a FastAPI
+> lifespan loop, no separate cron) with a periodic task that lists the next N days on the TEST calendar and stamps any
+> unstamped hand-made, not-yet-booked event (reuse `_stamp_finish_links`; same `_assert_test_calendar`-guarded `gcal` path).
+> **DONE this session:** the live-spin ✓ (Wes confirmed the address carries over) + the "From the calendar" side panel
+> (`e117c13`). THEN the rest of the backlog: **E.** "Job ready" note/edit step · tune the name auto-fill if Wes wants ·
+> saved-commercial-location addresses (the **C.** quick-pick is largely covered by the existing search-as-you-type pickers).
 > (**D. commercial
 > COMPANY vs JOB-LOCATION split DONE** `a9b4ddd` — picking a known company was dumping its BILLING address into the
 > address field; now applyQBco fills contact/billing only, the address is the JOB LOCATION, billing stays off the
