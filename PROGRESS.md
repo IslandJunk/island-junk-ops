@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — booking overhaul + Customers DB + backwards booking (create-on-calendar); NEXT: rest of backlog / Dropbox 1c)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`43eb580`** (code), migration head
+**2026-07-23 (⭐ RESUME POINT — backwards booking + Day-Board Finish button + Res/Comm prompt & auto-fill + "not assigned"/`#`-notes views all DONE & deployed; NEXT: Wes live-spins the backwards-booking flow, then rest of backlog / Dropbox 1c)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`f77019b`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -69,8 +69,25 @@
   Book it COMPLETE that event in place (no duplicate; `gcal.update_event` PATCHes it + marks `ij_app`; a 409 refuses an
   already-booked event). `settings.public_base_url` (default onrender). Verified: stamp logic, from-event parse, and an
   update_event create→patch→delete round-trip on the TEST calendar. **Live spin pending.**
+- **Backwards booking — Day-Board entry + prompt + views (`7e484d5`, `d8196ba`, `f77019b`; live spin pending):**
+  (1) the Day Board **stop panel** shows a "▶ Finish this booking" button on any stop with no linked job
+  (`day-board-bridge.injectFinishBooking`). (2) Tapping Finish (from the board OR the calendar link) → the booking screen
+  pops a **Residential/Commercial** prompt showing the event's title/date/address/notes, opens that flow
+  (`openType('collect'|'invoiced')`), and auto-fills the **address from the event's Location field**
+  (`_prefill_from_event` returns `ev.location`) + date + scope(title); a sticky bar keeps the title/notes visible so the
+  manager copies the NAME in (name isn't auto-parseable — Wes's call). (3) The Day Board now injects a **"Not assigned
+  yet"** panel (every uncoloured event, each with a Finish button) + a **"Calendar notes (# only)"** panel (the `#` notes
+  `build_day_board` now collects into `board.notes`) above `#board`. Also **`57a65b7`:** `/app/<prototype-filename.html>`
+  now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
+  were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — the rest of the backlog: **C.** quick-pick search · **E.** "Job ready" note/edit step. (**D. commercial
+> ▶▶ IMMEDIATE NEXT STEP — **live-spin the backwards booking end-to-end:** make a TEST-cal event WITH the address in the
+> Google Calendar **Location** field → open the Day Board (`/app/day-board`) → switch to its day (that stamps the finish
+> link + populates "Not assigned yet") → tap **Finish this booking** (on the stop or in the "Not assigned yet" panel) →
+> Res/Comm prompt → complete → confirm the SAME event fills (no duplicate) with the address carried over. THEN the rest of
+> the backlog: **C.** quick-pick search · **E.** "Job ready" note/edit step · tune the name auto-fill if Wes wants ·
+> optional: a background poll so the finish-link stamps without needing a board view · saved-commercial-location addresses.
+> (**D. commercial
 > COMPANY vs JOB-LOCATION split DONE** `a9b4ddd` — picking a known company was dumping its BILLING address into the
 > address field; now applyQBco fills contact/billing only, the address is the JOB LOCATION, billing stays off the
 > calendar for known companies + a "NEW COMPANY" line captures it for unknown ones. Saved-location-with-address
