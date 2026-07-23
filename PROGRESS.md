@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — booking overhaul + Customers DB screen; NEXT: create-on-calendar flow)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`3849ba1`** (code), migration head
+**2026-07-21 (⭐ RESUME POINT — booking overhaul + Customers DB + backwards booking (create-on-calendar); NEXT: rest of backlog / Dropbox 1c)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`43eb580`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -61,12 +61,16 @@
   text-button + the hub button — root cause of the repeated "needs a hard refresh"). Backend tested vs live DB (2,174 res
   / 824 co). Tabs/reclassify **need a live spin**.
 
-> ▶▶ IMMEDIATE NEXT STEP — Wes's create-on-calendar flow (his "backwards" booking), then the rest of the backlog:
-> B. **Create-on-calendar → "finish in the app":** the app spots a calendar event with NO linked job, drops a
->    "▶ Finish in the app →" link into it; tapping opens the booking screen pre-filled from the event; completing fills
->    that SAME event (no duplicate) + links the job. New calendar write (to a hand-made event) — TEST only during the
->    build. Confirmed with Wes.
-> Then the remaining booking backlog: **C.** quick-pick search · **E.** "Job ready" note/edit step. (**D. commercial
+- **BACKWARDS BOOKING — create-on-calendar → finish-in-app DONE (`650451d` foundation, `43eb580` complete; needs a live
+  end-to-end spin):** the manager makes a quick event on Google Calendar → `day_board.read_day` stamps a "▶ Finish this
+  booking in the app: `<public_base_url>/app/new-booking?event=<id>`" link onto any HAND-MADE, not-yet-booked event
+  (skips app-created/`#`-notes/already-stamped/linked; best-effort, TEST-cal guarded) → tapping it opens the booking
+  screen with a banner, `GET /booking/from-event/{id}` pre-fills date/time/title, and `payload().into_event_id` makes
+  Book it COMPLETE that event in place (no duplicate; `gcal.update_event` PATCHes it + marks `ij_app`; a 409 refuses an
+  already-booked event). `settings.public_base_url` (default onrender). Verified: stamp logic, from-event parse, and an
+  update_event create→patch→delete round-trip on the TEST calendar. **Live spin pending.**
+
+> ▶▶ IMMEDIATE NEXT STEP — the rest of the backlog: **C.** quick-pick search · **E.** "Job ready" note/edit step. (**D. commercial
 > COMPANY vs JOB-LOCATION split DONE** `a9b4ddd` — picking a known company was dumping its BILLING address into the
 > address field; now applyQBco fills contact/billing only, the address is the JOB LOCATION, billing stays off the
 > calendar for known companies + a "NEW COMPANY" line captures it for unknown ones. Saved-location-with-address
