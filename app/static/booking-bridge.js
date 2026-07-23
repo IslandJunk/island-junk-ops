@@ -314,6 +314,98 @@
   var eventId = decodeURIComponent(m[1]);
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
+  /* ---- persistent "From the calendar" panel: the manager's event name/phone/notes, shown beside
+     the booking form so he can copy them across without opening the job on another device (Wes). ---- */
+  function stripFinish(s) {   // drop the app's stamped "▶ Finish this booking…" link from the notes
+    s = String(s == null ? "" : s);
+    var i = s.indexOf("▶ Finish this booking");
+    if (i < 0) i = s.indexOf("Finish this booking in the app");
+    if (i < 0) return s.replace(/\s+$/, "");
+    return s.slice(0, i).replace(/[\s▶]+$/, "");
+  }
+  function extractPhone(s) {   // pull the first North-American phone out of the free text, if any
+    var m = String(s == null ? "" : s).match(/(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/);
+    return m ? m[0].replace(/^\s+|\s+$/g, "") : "";
+  }
+  function fallbackCopy(v) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = v; ta.style.position = "fixed"; ta.style.top = "-1000px"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+    } catch (e) {}
+  }
+  function ijCalPanelCss() {
+    if (document.getElementById("ijCalPanelCss")) return;
+    var st = document.createElement("style"); st.id = "ijCalPanelCss";
+    st.textContent =
+      "#ijCalPanel{background:#fff;color:#141414;border:1px solid #e7e3dd;border-radius:14px;padding:14px 15px;margin:0 0 14px;font-family:Inter,system-ui,sans-serif;box-shadow:0 6px 20px rgba(20,20,20,.10)}"
+      + "#ijCalPanel .ijcp-h{display:flex;align-items:center;justify-content:space-between;font-family:Anton,sans-serif;text-transform:uppercase;letter-spacing:.03em;font-size:15px;color:#F05014}"
+      + "#ijCalPanel #ijcpClose{background:none;border:none;font-size:20px;line-height:1;color:#9a938a;cursor:pointer;padding:0 2px}"
+      + "#ijCalPanel .ijcp-sub{font-size:11.5px;color:#8a827a;margin:3px 0 11px;line-height:1.45}"
+      + "#ijCalPanel .ijcp-row{border-top:1px solid #f0ece6;padding:9px 0}"
+      + "#ijCalPanel .ijcp-row.ijcp-first{border-top:none;padding-top:2px}"
+      + "#ijCalPanel .ijcp-lab{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#9a938a;margin-bottom:3px}"
+      + "#ijCalPanel .ijcp-ok{color:#3CA03C;font-weight:700;letter-spacing:0;text-transform:none}"
+      + "#ijCalPanel .ijcp-vw{display:flex;align-items:flex-start;gap:8px}"
+      + "#ijCalPanel .ijcp-val{flex:1;font-size:13.5px;line-height:1.45;color:#141414;white-space:pre-wrap;word-break:break-word}"
+      + "#ijCalPanel .ijcp-big .ijcp-val{font-size:17px;font-weight:700}"
+      + "#ijCalPanel .ijcp-copy{flex:none;background:#141414;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;padding:6px 11px;cursor:pointer;font-family:inherit}"
+      + "@media(min-width:1340px){#ijCalPanel{position:fixed;top:150px;right:24px;width:clamp(250px,calc((100vw - 800px)/2 - 24px),340px);max-height:calc(100vh - 230px);overflow:auto;margin:0;z-index:7000}}";
+    document.head.appendChild(st);
+  }
+  function buildCalPanel(pf) {
+    if (!pf) return;
+    var notes = stripFinish(pf.description);
+    var phone = extractPhone((pf.title || "") + "  " + notes);
+    var when = pf.on_date ? (esc(pf.on_date) + (pf.time_start ? (" · " + esc(pf.time_start) + (pf.time_end ? ("–" + esc(pf.time_end)) : "")) : "")) : "";
+    var rows = [
+      { k: "phone", label: "Phone", value: phone, big: true },
+      { k: "notes", label: "Name / notes", value: notes },
+      { k: "title", label: "Event title", value: pf.title || "" },
+      { k: "addr", label: "Address", value: pf.address || "", filled: true },
+      { k: "date", label: "Date", value: when, plain: true }
+    ].filter(function (r) { return r.value; });
+    if (!rows.length) return;
+
+    ijCalPanelCss();
+    var old = document.getElementById("ijCalPanel"); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var panel = document.createElement("div"); panel.id = "ijCalPanel";
+    var byK = {};
+    var html = '<div class="ijcp-h"><span>From the calendar</span><button type="button" id="ijcpClose" title="Hide">×</button></div>'
+      + '<div class="ijcp-sub">Copy these into the form so you don\'t have to open the job on another device.</div>';
+    rows.forEach(function (r, idx) {
+      byK[r.k] = r.value;
+      html += '<div class="ijcp-row' + (idx === 0 ? " ijcp-first" : "") + (r.big ? " ijcp-big" : "") + '">'
+        + '<div class="ijcp-lab">' + esc(r.label) + (r.filled ? ' <span class="ijcp-ok">✓ filled in</span>' : "") + '</div>'
+        + '<div class="ijcp-vw"><div class="ijcp-val">' + (r.k === "date" ? r.value : esc(r.value)) + '</div>'
+        + (r.plain ? "" : '<button type="button" class="ijcp-copy" data-ck="' + esc(r.k) + '">Copy</button>') + '</div></div>';
+    });
+    panel.innerHTML = html;
+
+    var flow = document.getElementById("flowView");
+    if (flow && flow.parentNode) flow.parentNode.insertBefore(panel, flow);
+    else if (document.body) document.body.appendChild(panel);
+
+    var copies = panel.querySelectorAll(".ijcp-copy");
+    for (var i = 0; i < copies.length; i++) {
+      copies[i].onclick = (function (btn) {
+        return function () {
+          var v = byK[btn.getAttribute("data-ck")] || "";
+          var label = btn.textContent;
+          var flash = function () { btn.textContent = "Copied ✓"; setTimeout(function () { btn.textContent = label; }, 1200); };
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(v).then(flash, function () { fallbackCopy(v); flash(); });
+            } else { fallbackCopy(v); flash(); }
+          } catch (e) { fallbackCopy(v); flash(); }
+        };
+      })(copies[i]);
+    }
+    var cl = document.getElementById("ijcpClose");
+    if (cl) cl.onclick = function () { if (panel.parentNode) panel.parentNode.removeChild(panel); };
+  }
+
   fetch("/booking/from-event/" + encodeURIComponent(eventId), { credentials: "same-origin" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (p) {
@@ -329,7 +421,7 @@
     var info = [p.title && "<b>" + esc(p.title) + "</b>",
       p.on_date && ("Date: " + esc(p.on_date) + (p.time_start ? (" · " + esc(p.time_start) + (p.time_end ? ("–" + esc(p.time_end)) : "")) : "")),
       p.address && ("Address: " + esc(p.address)),
-      p.description && ("Notes: " + esc(p.description))].filter(Boolean).join("<br>");
+      stripFinish(p.description) && ("Notes: " + esc(stripFinish(p.description)))].filter(Boolean).join("<br>");
     var ov = document.createElement("div");
     ov.id = "ijFinishPrompt";
     ov.style.cssText = "position:fixed;inset:0;z-index:9500;background:rgba(20,20,20,.72);display:flex;align-items:center;justify-content:center;padding:18px";
@@ -353,13 +445,7 @@
     var ov = document.getElementById("ijFinishPrompt"); if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
     var pf = window.__ijEventPrefill || {};
     try { if (typeof openType === "function") openType(type); } catch (e) {}
-    var ref = [pf.title, pf.description].filter(Boolean).join(" · ");   // sticky reference for copying the name
-    if (ref && document.body) {
-      var b = document.createElement("div");
-      b.style.cssText = "position:sticky;top:0;z-index:8000;background:#141414;color:#fff;font-size:12.5px;padding:8px 14px;line-height:1.4";
-      b.textContent = "Calendar event — copy the name/details in: " + ref;
-      document.body.insertBefore(b, document.body.firstChild);
-    }
+    try { buildCalPanel(pf); } catch (e) {}   // persistent "From the calendar" panel: name/phone/notes to copy across
     setTimeout(function () {   // fill after the flow has rendered + its wire set bookDate
       try {
         if (pf.on_date && typeof bookDate !== "undefined") {
