@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DbSession
 
@@ -217,12 +217,21 @@ def main_hub(request: Request, db: DbSession = Depends(get_db)) -> HTMLResponse:
                             bridge="main-hub-bridge.js", brand=brand)
 
 
+# Some approved hubs link to a screen by its raw prototype FILENAME (e.g. the manager hub's tool
+# tiles → island-junk-day-board-v28.html). Map those back to the real /app/<slug> route.
+_FILE_TO_SLUG = {meta["file"]: slug for slug, meta in SCREENS.items()}
+
+
 @app.get("/app/{slug}", response_class=HTMLResponse)
-def app_screen(slug: str, request: Request, db: DbSession = Depends(get_db)) -> HTMLResponse:
+def app_screen(slug: str, request: Request, db: DbSession = Depends(get_db)):
     """Serve any registered approved screen with its real DB refs + bridge, scoped to the
     signed-in user's active brand (owner-switchable; crew locked; default Victoria)."""
     scr = SCREENS.get(slug)
     if scr is None:
+        real = _FILE_TO_SLUG.get(slug)   # a hub linked by raw filename → redirect to the real route
+        if real:
+            q = request.url.query
+            return RedirectResponse(url=f"/app/{real}" + (f"?{q}" if q else ""), status_code=307)
         raise HTTPException(status_code=404, detail=f"Unknown screen '{slug}'")
     path = _PROTOTYPES / scr["file"]
     if not path.exists():
