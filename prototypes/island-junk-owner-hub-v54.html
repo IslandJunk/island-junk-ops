@@ -379,6 +379,7 @@ function lock(){$("#hub").style.display="none";$("#gate").style.display="flex";$
 const BUSINESS=[
   {k:"daynotes",ic:"📝",nm:"Crew notes",sb:"Set each shift’s notes by day",ready:true},
   {k:"reminders",ic:"📌",nm:"Reminders",sb:"Notes, to-dos & callbacks",ready:true},
+  {k:"customers",ic:"👥",nm:"Customers",sb:"Search & edit the customer database",ready:true},
   {k:"invoicing",ic:"💵",nm:"Invoicing & revenue",sb:"Ready-to-invoice queue + money",ready:true},
   {k:"estimate",ic:"🧮",nm:"Estimate builder",sb:"Build and save job quotes",ready:true},
   {k:"payroll",ic:"🧾",nm:"Payroll",sb:"Hours by pay period + Excel file",ready:true},
@@ -921,6 +922,7 @@ function rmBody(){var open=rmSortOpen(rmOpen());
   return '<div style="font-size:13px;color:#555;margin:-2px 0 14px;line-height:1.45">Jot anything to remember \u2014 a call to return, a follow-up, a job to book. Shared with '+RM_OTHER+'.</div>'+cap+head+list;}
 function renderReminders(){sheet('Reminders',rmBody());}
 function openSheet(key){
+  if(key==="customers"){window.location.href="/app/customers";return;}
   if(key==="colours"){ijcmOpen();return;}
   if(key==="daynotes"){dnSelDate=null;return renderDayNotes();}if(key==="reminders")return renderReminders();
   if(key==="clocktimes"){renderClockTimes();return;}

@@ -2078,6 +2078,7 @@ function openSheet(key){
   }
   if(key==="customers"){
     sheet("Customers & Accounts", `<div class="ctx">Owner only — the home for every customer and account. Built once here, fed automatically later.</div>`+
+      `<button class="open-btn" onclick="location.href='/app/customers'" style="width:100%;margin-bottom:12px">Open the customer database — search &amp; edit →</button>`+
       `<div class="irow"><div class="im"><div class="ic">Property management companies</div><div class="is">Each company opens a one-tap list of its buildings — tap a building and its address drops into the booking, read-only.</div></div></div>`+
       `<div class="irow"><div class="im"><div class="ic">Custom customers &amp; rate cards</div><div class="is">Saanich, Oak Bay and any account you add — each with its own rate card layered over the Rate Sheet.</div></div></div>`+
       `<div class="irow"><div class="im"><div class="ic">Import from QuickBooks</div><div class="is">Drop a fresh CSV export — it matches your existing records, adds the new ones, and shows what changed before saving.</div></div></div>`+
