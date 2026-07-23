@@ -129,7 +129,7 @@ def create_booking(
     address: str | None = None, town: str | None = None, scope: str | None = None,
     est_price: Decimal | None = None, crew: list[str] | None = None,
     time_start: time | None = None, time_end: time | None = None, notes: str | None = None,
-    headline: str | None = None, write_calendar: bool = True,
+    headline: str | None = None, write_calendar: bool = True, into_event_id: str | None = None,
 ) -> Job:
     # Use the caller's headline verbatim if given (the booking UI stamps its own,
     # matching the prototype exactly); otherwise build the standard format.
@@ -149,10 +149,17 @@ def create_booking(
         pass   # Dropbox is a nicety — a failure here never fails the booking
     if write_calendar:
         try:
-            job.gcal_event_id = gcal.create_event(
-                summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,
-                on_date=on_date, start_time=time_start, end_time=time_end,
-            )
+            if into_event_id:   # complete a manager-created event IN PLACE — no duplicate event
+                gcal.update_event(
+                    into_event_id, summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,
+                    on_date=on_date, start_time=time_start, end_time=time_end, mark_app=True,
+                )
+                job.gcal_event_id = into_event_id
+            else:
+                job.gcal_event_id = gcal.create_event(
+                    summary=headline, description=_description(job), color_id=SAGE_COLOR_ID,
+                    on_date=on_date, start_time=time_start, end_time=time_end,
+                )
         except Exception as exc:
             # Don't lose the booking on a calendar hiccup — the Job is still saved; record the
             # error so the UI + logs surface it (previously this 500'd and the button faked success).

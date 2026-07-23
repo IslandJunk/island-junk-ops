@@ -106,6 +106,34 @@ def create_event(
     return ev["id"]
 
 
+def update_event(
+    event_id: str, *, summary: str | None = None, description: str | None = None,
+    color_id: str | int | None = None, on_date: date | None = None,
+    start_time: time | None = None, end_time: time | None = None, mark_app: bool = False,
+) -> None:
+    """PATCH an existing event on the TEST calendar — only the fields given change. Used to complete a
+    manager-created event INTO a booking (fill headline/description/colour, mark it app-linked) and to
+    stamp the 'finish in the app' link onto an unbooked event. Hard-refuses any non-TEST calendar, the
+    same guard as every other writer, so it can never touch the two live dispatch calendars."""
+    cal = _assert_test_calendar(settings.google_test_calendar_id)
+    body: dict = {}
+    if summary is not None:
+        body["summary"] = summary
+    if description is not None:
+        body["description"] = description
+    if color_id is not None:
+        body["colorId"] = str(color_id)
+    if on_date is not None:
+        start_dt = datetime.combine(on_date, start_time or time(7, 30))
+        end_dt = datetime.combine(on_date, end_time) if end_time else start_dt + timedelta(minutes=30)
+        body["start"] = {"dateTime": start_dt.isoformat(), "timeZone": TZ}
+        body["end"] = {"dateTime": end_dt.isoformat(), "timeZone": TZ}
+    if mark_app:
+        body["extendedProperties"] = {"private": {"ij_app": "1"}}
+    if body:
+        _svc().events().patch(calendarId=cal, eventId=event_id, body=body).execute()
+
+
 def list_events_for_day(on_date: date) -> list[dict]:
     """Read one local day's events from the TEST calendar, ordered by start time.
 

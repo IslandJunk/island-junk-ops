@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.api.deps import require_manager
@@ -41,6 +42,7 @@ class BookingIn(BaseModel):
     time_end: time | None = None
     headline: str | None = None
     notes: str | None = None
+    into_event_id: str | None = None   # complete a manager-made calendar event in place (backwards booking)
 
 
 class BookingOut(BaseModel):
@@ -57,11 +59,42 @@ def create_booking(
     db: DbSession = Depends(get_db),
     _mgr: Employee = Depends(require_manager),
 ) -> BookingOut:
+    if body.into_event_id:   # completing a hand-made calendar event — never double-book the same event
+        dup = db.scalar(select(Job).where(Job.brand == body.brand, Job.gcal_event_id == body.into_event_id))
+        if dup is not None:
+            raise HTTPException(status_code=409, detail="That calendar event is already booked in the app.")
     job = service.create_booking(db, **body.model_dump())
     return BookingOut(
         id=str(job.id), headline=job.headline, status=job.status.value, gcal_event_id=job.gcal_event_id,
         calendar_error=(job.details or {}).get("_calendar_error"),
     )
+
+
+def _prefill_from_event(ev: dict) -> dict:
+    """Parse a (usually manager-created) calendar event into booking pre-fill: title, date, slot time,
+    description. For a hand-made event the slot time IS the intended time (unlike app events, where the
+    slot is positional and the real time is in the headline)."""
+    start, end = ev.get("start") or {}, ev.get("end") or {}
+    return {
+        "event_id": ev.get("id"), "title": ev.get("summary") or "", "description": ev.get("description") or "",
+        "on_date": (start.get("dateTime", "")[:10] or start.get("date") or None),
+        "time_start": (start.get("dateTime", "")[11:16] or None),
+        "time_end": (end.get("dateTime", "")[11:16] or None),
+    }
+
+
+@router.get("/from-event/{event_id}")
+def from_event(event_id: str, db: DbSession = Depends(get_db),
+               _mgr: Employee = Depends(require_manager)) -> dict:
+    """Read a TEST-calendar event so the booking screen can pre-fill from a hand-made event."""
+    from app.integrations import gcal
+    try:
+        ev = gcal.get_event(event_id)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=f"event not found ({type(exc).__name__})")
+    out = _prefill_from_event(ev)
+    out["already_booked"] = db.scalar(select(Job).where(Job.gcal_event_id == event_id)) is not None
+    return out
 
 
 class ConfirmTextIn(BaseModel):
