@@ -1,8 +1,25 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-23 (⭐ RESUME POINT — BACKWARDS BOOKING COMPLETE: live-spun ✓ + "From the calendar" side panel + background finish-link poll all DONE & deployed; NEXT: rest of the booking backlog / Dropbox 1c)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`1ac8d15`** (code), migration head
+**2026-07-23 (⭐ RESUME POINT — backwards booking COMPLETE + backlog E DONE: "Job ready" crew-note / edit step, plus a real second-booking bug fixed; NEXT: saved commercial-location addresses, then Dropbox 1c)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`2b62adc`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged — no migration this session), prod at `island-junk-ops.onrender.com`.
+
+- **NEW — "Job ready" popup: crew note + edit step, and the popup now RESETS between bookings (`2b62adc`; deployed, no
+  migration) — backlog E DONE.** The popup was already scannable; this is the note/edit half.
+  **Note for the crew:** a textarea in the popup rides to the server as `crew_note` and is written **under the event's
+  `NOTES:` line** — which `manager_notes_from_desc` already reads back — so the crew see it on the Day Board immediately,
+  instead of the manager having to go type it under `NOTES:` on Google Calendar after booking. Also stashed on
+  `job.details['crew_note']` so it survives a calendar hiccup; a blank note leaves `NOTES:` empty exactly as before.
+  Injected **OUTSIDE `#mBody`** on purpose — the bridge reads `#mBody.textContent` for the CALENDAR HEADLINE and sends it
+  verbatim as `notes`, so that element stays byte-identical (asserted in test). **Edit step:** a "Go back and edit the job"
+  link closes the popup (the form keeps its details) so the manager fixes a field instead of booking something wrong.
+  **Also fixed a real pre-existing bug found here:** the modal is ONE shared element and the injected controls persisted, so
+  a **second booking in the same page session** reopened with the Book-it button still DISABLED reading "Booked" — the
+  manager had to RELOAD the page to book another job. The extras now reset on every fresh open, and are hidden on the
+  non-"Job ready" modals ("Add the basics first") where they never belonged. Verified: esprima-clean · 9 backend cases
+  (`NOTES:` round-trip incl. multi-line, price still stripped for invoiced lanes, blank note = unchanged) ·
+  `BookingIn` ↔ `create_booking` signature alignment · 12 DOM cases in a harness (injection, `#mBody` contract,
+  second-booking reset, hidden on other modals, edit link closes).
 
 - **NEW — background finish-link poll (`1ac8d15`; deployed, no migration):** a FastAPI **lifespan loop** (same pattern as the
   QBO auto-sync — no separate cron service) stamps the "▶ Finish this booking in the app" link onto hand-made, not-yet-booked
@@ -111,13 +128,16 @@
   now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
   were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — **backwards booking is COMPLETE + deployed** (live-spin ✓, side panel `e117c13`, background poll
-> `1ac8d15`). Pick up the rest of the booking backlog: **E.** a **note / edit step in the "Job ready" popup** — the popup is
-> already scannable, so this adds a manager NOTE that flows into the event's `NOTES:` section + a way to edit a field before
-> Book it · **tune the name auto-fill** if Wes wants it to try harder than "copy it off the side panel" ·
-> **saved-commercial-location addresses** — pick a saved company site → auto-fill its address, auto-create the account for a new
-> site (the remaining half of D). (**C.** quick-pick is largely covered by the existing search-as-you-type pickers.)
-> **Watch after this deploy:** the poll prints `finish-link-poll: {...}` in the Render log ONLY when it actually stamps an event.
+> ▶▶ IMMEDIATE NEXT STEP — backwards booking + backlog **E** are done and deployed. Next: **saved commercial-location
+> addresses** — the remaining half of D: picking a saved company site should auto-fill THAT site's address, and a brand-new
+> site should be captured as a saved location on the account (today `applyQBco` fills contact/billing only, so the job
+> address is retyped every time; the "NEW COMPANY" line only captures unknown companies). Then **tune the name auto-fill**
+> if Wes wants it smarter than copying off the "From the calendar" panel. (**C.** quick-pick is largely covered by the
+> existing search-as-you-type pickers.) Then **Dropbox Phase 1c** — repoint the photo STORE (Postgres `job_photo` → the
+> Dropbox job folder), which ALSO makes the crew photos show as in-app thumbnails; then Phase 2/3.
+> **Live-check when convenient:** book a job → the "Job ready" popup now has a **"Note for the crew"** box; type one →
+> Book it → the note should appear under `NOTES:` on the calendar event AND on the crew's Day Board stop. Then book a
+> SECOND job **without reloading** — the Book-it button must be live again (that was broken before `2b62adc`).
 > (**D. commercial
 > COMPANY vs JOB-LOCATION split DONE** `a9b4ddd` — picking a known company was dumping its BILLING address into the
 > address field; now applyQBco fills contact/billing only, the address is the JOB LOCATION, billing stays off the
