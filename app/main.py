@@ -52,6 +52,19 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=_lifespan)
+
+
+@app.middleware("http")
+async def _revalidate_static(request: Request, call_next):
+    """The bridge JS under /static changes on every deploy. Tell the browser to REVALIDATE it
+    (etag → 304 when unchanged) instead of serving a stale copy, so a redeployed bridge is picked up
+    without a hard refresh (stale bridges had bitten the booking + hub buttons twice)."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.include_router(auth_router)
 app.include_router(booking_router)
 app.include_router(customers_router)
