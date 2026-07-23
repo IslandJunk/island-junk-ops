@@ -1,9 +1,32 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-23 (⭐ RESUME POINT — BOOKING BACKLOG DONE: backwards booking + E ("Job ready" crew-note/edit + second-booking bug fixed) + D (commercial saved locations auto-fill their address); NEXT: Dropbox 1c)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`ffa52b7`** (code), migration head
-**`e3b1c7a4d9f2`** (NEW — `company_customer.account_addrs`; already applied to prod, so the Render deploy's migrate step
-is a no-op), prod at `island-junk-ops.onrender.com`.
+**2026-07-23 (⭐ RESUME POINT — booking backlog DONE + **Dropbox Phase 1c** shipped (the job's Dropbox folder is now the photo store); NEXT: live-verify 1c on prod, then Dropbox Phase 2/3)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`ea60df0`** (code), migration head
+**`e3b1c7a4d9f2`** (`company_customer.account_addrs`; already applied to prod, so the Render deploy's migrate step
+is a no-op — 1c needed NO migration), prod at `island-junk-ops.onrender.com`.
+
+- **NEW — Dropbox Phase 1c: the job's Dropbox folder IS the photo store (`ea60df0`; no migration).** Photos were bytes in
+  Postgres (`job_photo`); they now go into the SAME per-job folder Phase 1b creates at booking — the one the calendar event
+  already links to. The listing READS that folder, so **photos the manager or a customer drop straight into Dropbox appear
+  in-app as thumbnails** on the Day Board stop, with no upload through the app at all.
+  `dropbox_files` (OAuth, not the dead legacy static-token path): `upload_into_folder`, `list_folder_images` (paged, images
+  only, oldest first, absent folder = no photos), `fetch_file` (`get_thumbnail_v2` + download fallback), `delete_path`,
+  `job_folder_of`. `job_photos`: a photo is an **opaque ref** — a UUID = a legacy Postgres row, anything else = a base64url
+  Dropbox path. New `GET|DELETE /jobs/{job_id}/photos/{ref}` is brand-gated on the job in the path AND a Dropbox ref must
+  resolve **inside that job's own folder** (prefix check anchored with a trailing `/`, so a sibling folder sharing a name
+  prefix is refused too). `?thumb=1` serves Dropbox's small JPEG and the Day-Board strip uses it, so 96px tiles stop pulling
+  full-size photos. **Nothing existing breaks:** Postgres rows are still listed + served, still WRITTEN when a job has no
+  folder or Dropbox is unreachable, and old `/job-photos/<uuid>` URLs still resolve. (`job_photo` was empty in prod anyway,
+  so that path is purely a safety net.)
+  **Robustness bug fixed en route:** `get_valid_access_token` RAISES when a refresh fails (revoked link / bad app creds) and
+  was called outside the try — a Dropbox auth problem would have **500'd the crew's photo strip on a live job**. All token
+  fetches now go through a `_token()` helper that never raises, so Dropbox trouble degrades to Postgres or a clean 503; the
+  silent fallbacks now LOG, so a wrong API shape shows in the Render log instead of looking like "nothing changed".
+  Verified: 24 cases through the real HTTP endpoints on throwaway jobs (created + deleted; prod left clean) — routing,
+  ref round-trip, hand-dropped photo appears, full-vs-thumb, 4 security refusals, outage degrades without a 500, no-folder
+  and no-token fall back, legacy route, delete routing, cross-brand 404.
+  **⚠ The live Dropbox HTTP calls are STUBBED in those tests** — the app key/secret live in Render, not the local `.env`, so
+  upload/list/fetch/delete against real Dropbox **verify on deploy**, exactly as Phase 1b did. See the next-step check below.
 
 - **NEW — commercial SAVED LOCATIONS (`ffa52b7`; migration `e3b1c7a4d9f2`, NEW HEAD, already applied to prod) — backlog D
   DONE.** Commercial accounts carried `accounts[]` = location NAMES only, so the manager retyped the job address on every
@@ -145,12 +168,18 @@ is a no-op), prod at `island-junk-ops.onrender.com`.
   now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
   were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — **the booking backlog is DONE** (backwards booking, E, D). Next: **Dropbox Phase 1c** — repoint
-> the photo STORE from Postgres `job_photo` → the Dropbox job folder, which ALSO makes the crew photos show as in-app
-> thumbnails; then Phase 2 (crew capture) + Phase 3 (yard + bin truck; bin damage → bin folder + alert). Small optional
-> leftovers, only if Wes asks: **tune the name auto-fill** (smarter than copying off the "From the calendar" panel) ·
-> **auto-create a commercial account** for a company that isn't on file yet (today the location save refuses an unknown
-> company by design rather than inventing one) · (**C.** quick-pick is largely covered by the existing pickers).
+> ▶▶ IMMEDIATE NEXT STEP — **live-verify Dropbox 1c on prod** (its Dropbox calls could only be stubbed locally; the creds
+> are Render-only). Book a job → attach a photo at booking → open that stop on the Day Board: the **Reference photos** strip
+> should show it. Then drop a photo straight into that job's Dropbox folder (via the calendar event's link) and reopen the
+> stop — **it should appear in the strip too, with no upload through the app**. That last one is the whole point of 1c.
+> If the strip is empty, check the Render log for `job_photos` warnings — the fallbacks are deliberately silent to the user
+> but LOUD in the log (`dropbox list failed…` / `dropbox upload failed…`), which names the wrong API call directly.
+> THEN **Dropbox Phase 2** (crew capture) + **Phase 3** (yard + bin truck; bin damage → bin folder + alert).
+> Small optional leftovers, only if Wes asks: **tune the name auto-fill** (smarter than copying off the "From the calendar"
+> panel) · **auto-create a commercial account** for a company that isn't on file yet (today the location save refuses an
+> unknown company by design rather than inventing one) · (**C.** quick-pick is largely covered by the existing pickers) ·
+> the dead legacy static-token helpers in `dropbox_files` (`upload_bytes` / `upload_job_photo` / `job_photo_path`) are now
+> unreferenced and could be deleted.
 > **Live-checks when convenient** — (1) book a job → the "Job ready" popup has a **"Note for the crew"** box; type one →
 > Book it → it should appear under `NOTES:` on the calendar event AND on the crew's Day Board stop; then book a SECOND job
 > **without reloading** — the Book-it button must be live again (broken before `2b62adc`). (2) commercial job → pick a
