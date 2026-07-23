@@ -13,7 +13,7 @@ the calendar gives colour + order + time; the DB gives the rich details.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
@@ -99,12 +99,15 @@ def build_day_board(events: list[dict], colour_by_id: dict[int, ColourMap],
 FINISH_MARKER = "▶ Finish this booking in the app"
 
 
-def _stamp_finish_links(events: list[dict], jobs_by_event: dict[str, Job]) -> None:
+def _stamp_finish_links(events: list[dict], jobs_by_event: dict[str, Job]) -> int:
     """Best-effort: drop a "finish in the app" link into any HAND-MADE calendar event that isn't booked
     yet (no linked job, not app-created, not a `#` note) so the manager can tap through from Google
-    Calendar and complete it properly. TEST-cal guarded; a per-event failure never affects the board."""
+    Calendar and complete it properly. TEST-cal guarded; a per-event failure never affects the board.
+
+    Returns how many events were actually stamped (the poll logs only when that is non-zero)."""
     from app.core.config import settings
     base = settings.public_base_url.rstrip("/")
+    stamped = 0
     for ev in events:
         eid = ev.get("id")
         if not eid or eid in jobs_by_event:
@@ -120,8 +123,41 @@ def _stamp_finish_links(events: list[dict], jobs_by_event: dict[str, Job]) -> No
         new_desc = f"{desc.rstrip()}\n\n{link}" if desc.strip() else link
         try:
             gcal.update_event(eid, description=new_desc)
+            stamped += 1
         except Exception:
             pass
+    return stamped
+
+
+def poll_finish_links(db: DbSession, days_ahead: int | None = None) -> dict:
+    """Stamp the "finish in the app" link onto hand-made TEST-calendar events for the next N days,
+    WITHOUT anyone having to open that day's Day Board first (`read_day` only stamps the day it reads).
+
+    Safety, deliberately narrow:
+      * Writes go through the SAME guarded path as the board (`gcal.update_event` ->
+        `_assert_test_calendar`), so this can never touch the two live dispatch calendars.
+      * It only ever appends to an event's DESCRIPTION — never the title, colour or time — so the
+        status colour Make.com reads for the revenue signal is untouched.
+      * It only considers HAND-MADE, not-yet-booked events (app-created / `#` notes / already-linked
+        events are skipped by `_stamp_finish_links`).
+      * Idempotent — an event already carrying the link is skipped, so re-polling costs nothing.
+    """
+    from app.core.config import settings
+    if not settings.google_test_calendar_id:
+        return {"skipped": "no TEST calendar configured", "stamped": 0}
+    days = max(1, days_ahead if days_ahead is not None else settings.finish_link_poll_days)
+    today = date.today()
+    scanned = stamped = 0
+    for offset in range(days):
+        events = gcal.list_events_for_day(today + timedelta(days=offset))
+        scanned += len(events)
+        ids = [e["id"] for e in events if e.get("id")]
+        if not ids:
+            continue
+        # NOT brand-scoped: the TEST calendar is shared, so a booking under EITHER brand means done.
+        rows = db.scalars(select(Job).where(Job.gcal_event_id.in_(ids))).all()
+        stamped += _stamp_finish_links(events, {j.gcal_event_id: j for j in rows})
+    return {"days": days, "events_scanned": scanned, "stamped": stamped}
 
 
 def read_day(db: DbSession, brand: Brand, on_date: date) -> dict:

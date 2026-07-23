@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     # booking link the manager taps from Google Calendar. Render overrides to the onrender.com origin.
     public_base_url: str = "https://island-junk-ops.onrender.com"
 
+    # Background finish-link poll: stamps the "Finish this booking in the app" link onto hand-made
+    # TEST-calendar events on a timer, so it shows up in Google Calendar without anyone opening that
+    # day's Day Board first. Description-only write, TEST calendar only. Set _enabled=false to stop it.
+    finish_link_poll_enabled: bool = True
+    finish_link_poll_seconds: int = 900   # 15 min, same cadence as the QBO auto-sync loop
+    finish_link_poll_days: int = 14       # how many days ahead to keep stamped
+
     @property
     def is_db_configured(self) -> bool:
         return bool(self.database_url)

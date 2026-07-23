@@ -35,20 +35,26 @@ from app.web.refs import reference_bootstrap_script
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    """Start the QBO auto-sync background loop. Best-effort: a scheduler hiccup never blocks the
-    web app from serving, and the loop sleeps before its first run + swallows its own errors."""
+    """Start the background loops: QBO auto-sync + the backwards-booking finish-link stamp. Best-effort
+    — a scheduler hiccup never blocks the web app from serving, and each loop sleeps before its first
+    run + swallows its own errors."""
     import asyncio
-    task = None
+    tasks = []
     try:
         from app.quickbooks.scheduler import qbo_poll_loop
-        task = asyncio.create_task(qbo_poll_loop())
+        tasks.append(asyncio.create_task(qbo_poll_loop()))
     except Exception:
-        task = None
+        pass
+    try:
+        from app.dispatch.scheduler import finish_link_poll_loop
+        tasks.append(asyncio.create_task(finish_link_poll_loop()))
+    except Exception:
+        pass
     try:
         yield
     finally:
-        if task is not None:
-            task.cancel()
+        for t in tasks:
+            t.cancel()
 
 
 app = FastAPI(title=settings.app_name, lifespan=_lifespan)
