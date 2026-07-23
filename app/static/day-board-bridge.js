@@ -208,11 +208,29 @@
     wrap.appendChild(a);
     ow.parentNode.insertBefore(wrap, ow);   // above the "on our way" button, near the reference photos
   }
+  // Backwards booking: a stop that's a bare calendar event (no linked Job yet) gets a prominent
+  // "Finish this booking in the app" button — opens the booking screen scoped to THIS event so
+  // completing it fills the same event (no duplicate). Right on the board, no Calendar round-trip.
+  function injectFinishBooking() {
+    var cur = (typeof CURRENT !== "undefined") ? CURRENT : null;
+    var ow = document.getElementById("owBtn");
+    if (!cur || cur.job_id || !cur.id || !ow || document.getElementById("ijFinishWrap")) return;
+    var wrap = document.createElement("div");
+    wrap.id = "ijFinishWrap"; wrap.style.cssText = "margin:2px 0 12px";
+    var a = document.createElement("a");
+    a.href = "/app/new-booking?event=" + encodeURIComponent(cur.id);
+    a.textContent = "▶ Finish this booking in the app";
+    a.style.cssText = "display:block;text-align:center;font-weight:800;font-size:14px;color:#fff;"
+      + "background:#F05014;text-decoration:none;border-radius:11px;padding:13px";
+    wrap.appendChild(a);
+    ow.parentNode.insertBefore(wrap, ow);   // top of the stop's actions
+  }
   function wireNextEta() {
     if (typeof openStop !== "function") return;
     var _open = openStop;
     window.openStop = function () {
       var r = _open.apply(this, arguments);
+      try { injectFinishBooking(); } catch (e) {}
       try { injectEta(); } catch (e) {}
       try { injectPhotos(); } catch (e) {}
       try { injectPhotosFolder(); } catch (e) {}
