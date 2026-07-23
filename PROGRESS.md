@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-21 (⭐ RESUME POINT — booking overhaul: pickers + scannable popup + living-record event + manual text button + crew notes/photos; NEXT: create-on-calendar flow)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`a9b4ddd`** (code), migration head
+**2026-07-21 (⭐ RESUME POINT — booking overhaul + Customers DB screen; NEXT: create-on-calendar flow)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`5068378`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -44,6 +44,16 @@
   `manager_notes` into the stop's existing office-notes display and injects a "📁 Open the job's photo folder" link
   (from `photos_link`). So the manager types under `NOTES:` on the calendar → the crew see it on the job; the manager
   drops photos in the folder via the calendar link → the crew tap through to the same folder. (Needs a live check.)
+- **Review popup polish (`708c272`, `55be0f1`):** the "Job ready" popup now HIDES the internal lines (CALENDAR
+  HEADLINE/DATE/INITIAL COLOUR/RECURRING) from view while keeping CALENDAR HEADLINE in `#mBody.textContent` for the
+  bridge; the manual **Text customer** button now shows beside Book it from the start (disabled → enabled on booking);
+  and the summary text is bigger/brighter/font-smoothed (Wes found it soft). All confirmed live by Wes.
+- **Customers DB screen (`5068378`, deployed — NEW):** the residential list had no edit UI. Added `GET
+  /customers/search?q=` + `PATCH /customers/{kind}/{id}` (owner+manager via `require_manager`, brand-scoped) across
+  residential / commercial / PM. New self-contained page `prototypes/island-junk-customers-v1.html` (search-as-you-type
+  → tap a row → edit name/contact/phone/email/address → save), registered as SCREEN `customers` (`/app/customers`); a
+  floating **Customers** button injected by the owner + manager hub bridges. Backend tested vs live DB (2,174 res / 824
+  co; search + patch-mapping + rollback). **Needs a live check** — esp. the floating button's placement on each hub.
 
 > ▶▶ IMMEDIATE NEXT STEP — Wes's create-on-calendar flow (his "backwards" booking), then the rest of the backlog:
 > B. **Create-on-calendar → "finish in the app":** the app spots a calendar event with NO linked job, drops a
