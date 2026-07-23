@@ -50,12 +50,44 @@
     Object.keys(cache).forEach(function (o) { all = all.concat(cache[o]); });
     window.STOPS = all;
   }
+  function _esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function _section(title, count, inner) {
+    return '<details' + (count ? ' open' : '') + ' style="background:#1c1917;border:1px solid #2c2824;border-radius:12px;margin-bottom:10px">'
+      + '<summary style="cursor:pointer;font-weight:800;font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:#F4F1EC;padding:12px 14px">'
+      + _esc(title) + ' <span style="color:#9a938a">(' + count + ')</span></summary>'
+      + '<div style="padding:0 14px 10px">' + inner + '</div></details>';
+  }
+  // Manager Day Board extras (Wes): a "not assigned yet" list (uncoloured events, each with a Finish
+  // button) + the `#` calendar notes the board otherwise hides. Injected above #board from the board data.
+  function renderExtras() {
+    var board = window.__ijDayBoard || {};
+    var host = document.getElementById("board");
+    if (!host) return;
+    var wrap = document.getElementById("ijExtras");
+    if (!wrap) { wrap = document.createElement("div"); wrap.id = "ijExtras"; wrap.style.cssText = "margin:0 0 14px"; host.parentNode.insertBefore(wrap, host); }
+    var un = board.unassigned || [], notes = board.notes || [];
+    var unHtml = un.length ? un.map(function (j) {
+      var meta = [j.customer || j.headline, j.address].filter(Boolean).map(_esc).join(" · ");
+      var fin = j.job_id ? "" : '<a href="/app/new-booking?event=' + encodeURIComponent(j.event_id || "")
+        + '" style="display:inline-block;margin-top:7px;background:#F05014;color:#fff;text-decoration:none;font-weight:800;font-size:12.5px;border-radius:9px;padding:8px 12px">▶ Finish this booking</a>';
+      return '<div style="border-top:1px solid #2c2824;padding:10px 0"><div style="font-weight:700;color:#F4F1EC">'
+        + _esc(j.headline || j.customer || "(event)") + '</div>'
+        + (meta ? '<div style="color:#9a938a;font-size:12px;margin-top:2px">' + meta + '</div>' : '') + fin + '</div>';
+    }).join("") : '<div style="color:#9a938a;font-size:12.5px;padding:8px 0">Everything on this day already has a truck colour.</div>';
+    var noteHtml = notes.length ? notes.map(function (n) {
+      return '<div style="border-top:1px solid #2c2824;padding:10px 0"><div style="font-weight:700;color:#F4F1EC">'
+        + _esc(n.title || n.raw || "(note)") + '</div>'
+        + (n.description ? '<div style="color:#9a938a;font-size:12px;margin-top:2px;white-space:pre-wrap">' + _esc(n.description) + '</div>' : '') + '</div>';
+    }).join("") : '<div style="color:#9a938a;font-size:12.5px;padding:8px 0">No # notes on this day.</div>';
+    wrap.innerHTML = _section("Not assigned yet", un.length, unHtml) + _section("Calendar notes (# only)", notes.length, noteHtml);
+  }
   function render() {
     try {
       if (typeof ST !== "undefined") { ST.view = "manager"; ST.truck = "all"; }
       if (typeof renderTrucks === "function") renderTrucks();
       if (typeof applyChrome === "function") applyChrome();
       if (typeof renderBoard === "function") renderBoard();
+      renderExtras();
     } catch (e) {}
   }
   function loadDay(offset) {
