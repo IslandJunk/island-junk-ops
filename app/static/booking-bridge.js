@@ -157,16 +157,18 @@
   function payload() {
     var t = lane();
     var d = (typeof bookDate !== "undefined") ? bookDate : new Date();
+    var pf = window.__ijEventPrefill || null;   // backwards booking: completing a hand-made event
     return {
-      brand: "victoria", on_date: ymd(d),
+      brand: "victoria", on_date: (pf && pf.on_date) || ymd(d),
       booking_lane: t, account_type: ACCT[t] || null,
       customer_name: customerFor(t) || null,
       customer_phone: val("phone") || null, customer_email: val("email") || null,
       address: anyVal("addr", "cbAddr", "siteAddr", "binAddr") || null,
-      time_start: parseStart(),
-      time_end: parseEnd(),
+      time_start: parseStart() || (pf && pf.time_start) || null,
+      time_end: parseEnd() || (pf && pf.time_end) || null,
       headline: headlineFromBody(),
       notes: (document.querySelector("#mBody") || {}).textContent || null,
+      into_event_id: (pf && pf.into_event_id) || null,   // complete THIS event in place, no duplicate
     };
   }
 
@@ -300,4 +302,30 @@
       if (t && /job ready/i.test(t.textContent)) addBookBtn();
     }).observe(ovl, { attributes: true, attributeFilter: ["class"] });
   }
+})();
+
+/* Backwards booking: /app/new-booking?event=<id> completes a HAND-MADE calendar event in place.
+   Fetch the event's pre-fill, stash it for payload() (which then sends into_event_id + the event's own
+   date/time), and show a banner. The manager still picks the job type and fills the details. */
+(function () {
+  var m = /[?&]event=([^&]+)/.exec(location.search || "");
+  if (!m) return;
+  var eventId = decodeURIComponent(m[1]);
+  function banner(text, color) {
+    var b = document.createElement("div");
+    b.style.cssText = "position:sticky;top:0;z-index:8000;background:" + color + ";color:#fff;font-weight:700;"
+      + "font-size:13px;padding:10px 14px;line-height:1.45";
+    b.textContent = text;
+    if (document.body) document.body.insertBefore(b, document.body.firstChild);
+  }
+  fetch("/booking/from-event/" + encodeURIComponent(eventId), { credentials: "same-origin" })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (p) {
+      if (!p) { banner("Couldn't load that calendar event.", "#C0392B"); return; }
+      if (p.already_booked) { banner("This calendar event is already booked in the app.", "#C0392B"); return; }
+      window.__ijEventPrefill = { into_event_id: eventId, on_date: p.on_date, time_start: p.time_start, time_end: p.time_end, title: p.title };
+      banner("Finishing a calendar event: “" + (p.title || "(untitled)") + "”"
+        + (p.on_date ? (" · " + p.on_date) : "") + " — pick the job type and fill it in; Book it completes THIS event (no duplicate).", "#F05014");
+    })
+    .catch(function () {});
 })();

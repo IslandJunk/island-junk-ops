@@ -90,6 +90,34 @@ def build_day_board(events: list[dict], colour_by_id: dict[int, ColourMap],
     }
 
 
+FINISH_MARKER = "▶ Finish this booking in the app"
+
+
+def _stamp_finish_links(events: list[dict], jobs_by_event: dict[str, Job]) -> None:
+    """Best-effort: drop a "finish in the app" link into any HAND-MADE calendar event that isn't booked
+    yet (no linked job, not app-created, not a `#` note) so the manager can tap through from Google
+    Calendar and complete it properly. TEST-cal guarded; a per-event failure never affects the board."""
+    from app.core.config import settings
+    base = settings.public_base_url.rstrip("/")
+    for ev in events:
+        eid = ev.get("id")
+        if not eid or eid in jobs_by_event:
+            continue
+        if is_manager_note(ev.get("summary", "")):
+            continue
+        if ((ev.get("extendedProperties") or {}).get("private") or {}).get("ij_app") == "1":
+            continue   # app-created (already ours)
+        desc = ev.get("description") or ""
+        if FINISH_MARKER in desc:
+            continue   # already stamped
+        link = f"{FINISH_MARKER}: {base}/app/new-booking?event={eid}"
+        new_desc = f"{desc.rstrip()}\n\n{link}" if desc.strip() else link
+        try:
+            gcal.update_event(eid, description=new_desc)
+        except Exception:
+            pass
+
+
 def read_day(db: DbSession, brand: Brand, on_date: date) -> dict:
     events = gcal.list_events_for_day(on_date)
     ids = [e["id"] for e in events if e.get("id")]
@@ -99,6 +127,11 @@ def read_day(db: DbSession, brand: Brand, on_date: date) -> dict:
             select(Job).where(Job.brand == brand, Job.gcal_event_id.in_(ids))
         ).all()
         jobs_by_event = {j.gcal_event_id: j for j in rows}
+
+    try:   # backwards booking: stamp hand-made, not-yet-booked events with a "finish in the app" link
+        _stamp_finish_links(events, jobs_by_event)
+    except Exception:
+        pass
 
     cmap = db.scalars(select(ColourMap).where(ColourMap.brand == brand)).all()
     colour_by_id = {r.google_color_id: r for r in cmap if r.google_color_id is not None}

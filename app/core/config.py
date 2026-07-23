@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     sendgrid_from_email: str | None = None
     sendgrid_from_name: str = "Island Junk"
 
+    # Public origin for links the app writes INTO calendar events — the "finish in the app" backwards-
+    # booking link the manager taps from Google Calendar. Render overrides to the onrender.com origin.
+    public_base_url: str = "https://island-junk-ops.onrender.com"
+
     @property
     def is_db_configured(self) -> bool:
         return bool(self.database_url)
