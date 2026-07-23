@@ -32,3 +32,20 @@
     };
   }
 })();
+
+/* Customers database entry — a floating button to the /app/customers search+edit screen (owner+manager). */
+(function () {
+  function add() {
+    if (document.getElementById("ijCustomersBtn")) return;
+    var b = document.createElement("button");
+    b.id = "ijCustomersBtn"; b.type = "button"; b.textContent = "Customers";
+    b.title = "Search & edit the customer database";
+    b.style.cssText = "position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));right:16px;z-index:9000;"
+      + "background:#F05014;color:#fff;border:none;border-radius:999px;padding:11px 18px;font-family:inherit;"
+      + "font-weight:800;font-size:13.5px;letter-spacing:.01em;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.30)";
+    b.onclick = function () { window.location.href = "/app/customers"; };
+    document.body.appendChild(b);
+  }
+  if (document.readyState !== "loading") add();
+  else document.addEventListener("DOMContentLoaded", add);
+})();

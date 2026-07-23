@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Customers — Island Junk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--orange:#F05014;--orange-d:#d5420c;--ink:#141414;--paper:#F4F3F1;--muted:#6b6660;--line:#e3ded7;--card:#fff;--green:#3CA03C;--amber:#E8A317}
+  @media (prefers-color-scheme: dark){:root{--ink:#F4F1EC;--paper:#141210;--muted:#9a938a;--line:#2c2824;--card:#1c1917}}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:18px 16px 60px}
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+  .back{background:none;border:none;color:var(--muted);font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;padding:6px 0}
+  h1{font-family:Anton,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-size:30px;margin:2px 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .search{position:relative;margin-bottom:14px}
+  .search input{width:100%;padding:14px 14px;font-size:16px;font-family:inherit;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
+  .search input:focus{outline:none;border-color:var(--orange)}
+  .count{color:var(--muted);font-size:12px;margin:0 2px 10px}
+  .row{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:9px;cursor:pointer;font-family:inherit;color:var(--ink)}
+  .row:hover{border-color:var(--orange)}
+  .row .nm{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:999px;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+  .badge.residential{color:var(--green)} .badge.commercial{color:var(--orange)} .badge.pm{color:var(--amber)}
+  .row .meta{color:var(--muted);font-size:12.5px;margin-top:3px;line-height:1.5}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:30px 10px}
+  .hidden{display:none}
+  .editor{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .editor h2{font-family:Anton,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-size:20px;margin:0 0 2px}
+  .fld{margin-top:12px} .fld .lab{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px}
+  .fld input{width:100%;padding:11px 12px;font-size:15px;font-family:inherit;border:1.5px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
+  .fld input:focus{outline:none;border-color:var(--orange)}
+  .row2{display:flex;gap:10px} .row2>div{flex:1}
+  .btns{display:flex;gap:10px;margin-top:18px}
+  .btn{flex:1;padding:13px;border:none;border-radius:11px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer}
+  .btn.save{background:var(--orange);color:#fff} .btn.save:active{background:var(--orange-d)}
+  .btn.cancel{background:transparent;border:1.5px solid var(--line);color:var(--muted)}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--green);color:#fff;font-weight:700;font-size:14px;padding:11px 18px;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><button class="back" onclick="goBack()">‹ Back</button></div>
+  <h1>Customers</h1>
+  <div class="sub">Search everyone, open a record, fix a name / phone / email / address. Saves to the app database.</div>
+
+  <div id="searchView">
+    <div class="search"><input id="q" type="search" autocomplete="off" placeholder="Search by name, company, phone, email, address…"></div>
+    <div class="count" id="count"></div>
+    <div id="results"></div>
+  </div>
+
+  <div id="editView" class="editor hidden"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var $ = function(s){ return document.querySelector(s); };
+  var esc = function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+  var badgeClass = function(kind){ return kind==='residential'?'residential':(kind==='company'?'commercial':'pm'); };
+
+  function goBack(){ if(!$("#editView").classList.contains('hidden')){ closeEditor(); return; } if(history.length>1) history.back(); else location.href='/app'; }
+  window.goBack = goBack;
+
+  function toast(msg){ var t=$("#toast"); t.textContent=msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 1800); }
+
+  var timer=null, lastQ=null;
+  function onType(){ clearTimeout(timer); timer=setTimeout(runSearch, 220); }
+  function runSearch(){
+    var q=$("#q").value.trim();
+    lastQ=q;
+    fetch('/customers/search?limit=40&q='+encodeURIComponent(q), {credentials:'same-origin'})
+      .then(function(r){ if(r.status===401||r.status===403) throw new Error('auth'); return r.json(); })
+      .then(function(res){ if(q!==lastQ) return; render(res.results||[], q); })
+      .catch(function(e){ $("#results").innerHTML=''; $("#count").textContent = (e&&e.message==='auth')?'Please sign in as a manager or owner first.':'Could not load customers — try again.'; });
+  }
+
+  function render(rows, q){
+    $("#count").textContent = rows.length ? (rows.length + (rows.length>=80?'+':'') + ' match' + (rows.length===1?'':'es')) : '';
+    if(!rows.length){ $("#results").innerHTML = '<div class="empty">'+(q? 'No customers match “'+esc(q)+'”.' : 'Start typing to search, or browse below.')+'</div>'; return; }
+    $("#results").innerHTML = rows.map(function(c,i){
+      var meta=[c.phone,c.email,c.address].filter(Boolean).map(esc).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+      return '<button class="row" data-i="'+i+'">'
+        + '<div class="nm">'+esc(c.name)+'<span class="badge '+badgeClass(c.kind)+'">'+esc(c.type_label)+'</span></div>'
+        + (meta? '<div class="meta">'+meta+'</div>' : '')
+        + '</button>';
+    }).join('');
+    var btns=$("#results").querySelectorAll('.row');
+    for(var i=0;i<btns.length;i++){ (function(rec){ btns[+rec.getAttribute('data-i')].onclick=function(){ openEditor(rows[+rec.getAttribute('data-i')]); }; })(btns[i]); }
+  }
+
+  function field(lab, id, val){ return '<div class="fld"><div class="lab">'+lab+'</div><input id="'+id+'" value="'+esc(val)+'"></div>'; }
+  function openEditor(c){
+    var body;
+    if(c.kind==='residential'){
+      body = '<div class="row2">'+field('First name','f_first',c.first)+field('Last name','f_last',c.last)+'</div>';
+    } else {
+      body = field(c.kind==='company'?'Company':'Name','f_company',c.company||c.name)+field('Contact','f_contact',c.contact);
+    }
+    body += field('Phone','f_phone',c.phone)+field('Email','f_email',c.email)+field('Address','f_address',c.address);
+    $("#editView").innerHTML =
+      '<h2>Edit customer</h2><div class="sub" style="margin-bottom:2px">'+esc(c.type_label)+'</div>'
+      + body
+      + '<div class="btns"><button class="btn cancel" id="eCancel">Cancel</button><button class="btn save" id="eSave">Save changes</button></div>';
+    $("#searchView").classList.add('hidden'); $("#editView").classList.remove('hidden'); window.scrollTo(0,0);
+    $("#eCancel").onclick=closeEditor;
+    $("#eSave").onclick=function(){ saveEditor(c, this); };
+  }
+  function closeEditor(){ $("#editView").classList.add('hidden'); $("#editView").innerHTML=''; $("#searchView").classList.remove('hidden'); }
+
+  function saveEditor(c, btn){
+    var patch={};
+    if(c.kind==='residential'){ patch.first=$("#f_first").value.trim(); patch.last=$("#f_last").value.trim(); }
+    else { patch.company=$("#f_company").value.trim(); patch.contact=$("#f_contact").value.trim(); }
+    patch.phone=$("#f_phone").value.trim(); patch.email=$("#f_email").value.trim(); patch.address=$("#f_address").value.trim();
+    btn.disabled=true; btn.textContent='Saving…';
+    fetch('/customers/'+encodeURIComponent(c.kind)+'/'+encodeURIComponent(c.id), {
+      method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)
+    }).then(function(r){ return r.ok ? r.json() : r.json().then(function(j){ throw new Error(j.detail||'save failed'); }); })
+      .then(function(){ toast('✓ Saved'); closeEditor(); runSearch(); })
+      .catch(function(e){ btn.disabled=false; btn.textContent='Save changes'; toast(e.message==='auth'?'Sign in first':('Save failed — '+e.message)); });
+  }
+
+  $("#q").addEventListener('input', onType);
+  runSearch();   // initial browse
+})();
+</script>
+</body>
+</html>
