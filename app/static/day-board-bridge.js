@@ -217,7 +217,8 @@
         strip.style.cssText = "display:flex;gap:8px;overflow-x:auto;padding-bottom:4px";
         photos.forEach(function (p) {
           var im = document.createElement("img");
-          im.src = p.url; im.alt = p.filename || "photo"; im.loading = "lazy";
+          im.src = p.thumb_url || p.url;   // Dropbox-sized tile; the full photo loads on tap
+          im.alt = p.filename || "photo"; im.loading = "lazy";
           im.style.cssText = "height:96px;width:96px;object-fit:cover;border-radius:10px;border:1px solid #d8d3cc;flex:0 0 auto;cursor:pointer";
           im.onclick = function () { openPhoto(p.url); };
           strip.appendChild(im);

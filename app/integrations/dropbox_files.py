@@ -171,3 +171,103 @@ def ensure_job_folder(db, job, on_date) -> str | None:
     details["dropbox"] = {"folder": path, "link": link}
     job.details = details
     return link
+
+
+# ── Phase 1c: the job's Dropbox folder IS the photo store (upload / list / fetch / delete) ──
+
+DBX_API = "https://api.dropboxapi.com/2"
+DBX_CONTENT = "https://content.dropboxapi.com/2"
+_IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif")
+
+
+def _hdr(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+
+def job_folder_of(job) -> str | None:
+    """The folder Phase 1b stashed on the job at booking, if any."""
+    return ((job.details or {}).get("dropbox") or {}).get("folder") or None
+
+
+def upload_into_folder(token: str, folder: str, filename: str, data: bytes) -> dict:
+    """Put one photo in the job's folder. `autorename` so two `photo.jpg` never collide."""
+    path = f"{folder.rstrip('/')}/{_safe(filename)}"
+    _assert_under_root(path)
+    import httpx
+    resp = httpx.post(
+        f"{DBX_CONTENT}/files/upload",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Dropbox-API-Arg": json.dumps({"path": path, "mode": "add", "autorename": True, "mute": True}),
+            "Content-Type": "application/octet-stream",
+        },
+        content=data, timeout=60,
+    )
+    if resp.status_code >= 400:
+        raise DropboxGuardError(f"Dropbox upload {resp.status_code}: {resp.text[:200]}")
+    j = resp.json()
+    return {"path": j.get("path_lower") or path, "name": j.get("name") or _safe(filename)}
+
+
+def list_folder_images(token: str, folder: str) -> list[dict]:
+    """Every image in the job's folder — INCLUDING ones dropped straight into Dropbox (by the
+    manager via the calendar link, or a customer's photos filed there). That is the whole point of
+    making the folder the store rather than Postgres. Oldest first. A folder that doesn't exist yet
+    is not an error — it simply has no photos."""
+    _assert_under_root(folder)
+    import httpx
+    out: list[dict] = []
+    cursor = None
+    while True:
+        if cursor:
+            r = httpx.post(f"{DBX_API}/files/list_folder/continue",
+                           headers=_hdr(token), json={"cursor": cursor}, timeout=30)
+        else:
+            r = httpx.post(f"{DBX_API}/files/list_folder",
+                           headers=_hdr(token), json={"path": folder}, timeout=30)
+        if r.status_code == 409:
+            return []   # path/not_found — nothing filed yet
+        if r.status_code >= 400:
+            raise DropboxGuardError(f"Dropbox list_folder {r.status_code}: {r.text[:200]}")
+        j = r.json()
+        for e in j.get("entries", []):
+            if e.get(".tag") == "file" and (e.get("name") or "").lower().endswith(_IMAGE_EXT):
+                out.append({"path": e.get("path_lower"), "name": e.get("name"),
+                            "size": e.get("size"), "modified": e.get("server_modified") or ""})
+        if not j.get("has_more"):
+            break
+        cursor = j.get("cursor")
+    out.sort(key=lambda x: x.get("modified") or "")
+    return out
+
+
+def fetch_file(token: str, path: str, *, thumb: bool = False) -> tuple[bytes, str]:
+    """Bytes for one file under the root. `thumb` asks Dropbox for a small JPEG — the Day-Board
+    strip renders 96px tiles, so there's no reason to move full-size photos for it."""
+    _assert_under_root(path)
+    import httpx
+    if thumb:
+        arg = {"resource": {".tag": "path", "path": path}, "format": {".tag": "jpeg"},
+               "size": {".tag": "w640h480"}, "mode": {".tag": "strict"}}
+        r = httpx.post(f"{DBX_CONTENT}/files/get_thumbnail_v2",
+                       headers={"Authorization": f"Bearer {token}", "Dropbox-API-Arg": json.dumps(arg)},
+                       timeout=60)
+        if r.status_code < 400:
+            return r.content, "image/jpeg"
+        # not thumbnailable (odd format / too large) -> fall through and serve the original
+    r = httpx.post(f"{DBX_CONTENT}/files/download",
+                   headers={"Authorization": f"Bearer {token}", "Dropbox-API-Arg": json.dumps({"path": path})},
+                   timeout=60)
+    if r.status_code >= 400:
+        raise DropboxGuardError(f"Dropbox download {r.status_code}: {r.text[:200]}")
+    ct = (r.headers.get("content-type") or "").split(";")[0].strip()
+    return r.content, (ct if ct.startswith("image/") else "image/jpeg")
+
+
+def delete_path(token: str, path: str) -> None:
+    """Remove one file under the root (a wrong photo got filed). 409 = already gone."""
+    _assert_under_root(path)
+    import httpx
+    r = httpx.post(f"{DBX_API}/files/delete_v2", headers=_hdr(token), json={"path": path}, timeout=30)
+    if r.status_code >= 400 and r.status_code != 409:
+        raise DropboxGuardError(f"Dropbox delete {r.status_code}: {r.text[:200]}")
