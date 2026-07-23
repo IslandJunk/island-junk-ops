@@ -1,7 +1,7 @@
 # Island Junk — Build Progress & Handoff
 
 **2026-07-21 (⭐ RESUME POINT — booking overhaul + Customers DB screen; NEXT: create-on-calendar flow)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`5068378`** (code), migration head
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`3849ba1`** (code), migration head
 **`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
 
 - **Phase 1b PROVEN — the payoff (booking → TEST calendar → Dropbox folder, end to end):** Wes booked a windowed
@@ -51,9 +51,15 @@
 - **Customers DB screen (`5068378`, deployed — NEW):** the residential list had no edit UI. Added `GET
   /customers/search?q=` + `PATCH /customers/{kind}/{id}` (owner+manager via `require_manager`, brand-scoped) across
   residential / commercial / PM. New self-contained page `prototypes/island-junk-customers-v1.html` (search-as-you-type
-  → tap a row → edit name/contact/phone/email/address → save), registered as SCREEN `customers` (`/app/customers`); a
-  floating **Customers** button injected by the owner + manager hub bridges. Backend tested vs live DB (2,174 res / 824
-  co; search + patch-mapping + rollback). **Needs a live check** — esp. the floating button's placement on each hub.
+  → tap a row → edit name/contact/phone/email/address → save), registered as SCREEN `customers` (`/app/customers`).
+  **Entry points (`629fd5c`):** an owner-hub **Customers** tile (THE BUSINESS grid, `openSheet`→/app/customers, confirmed
+  live) + a manager-hub "Open the customer database" button atop the existing "Customers & Accounts" sheet. (The floating
+  hub button was dropped — it wasn't showing; the tile is the hub's native pattern.) **Tabs + reclassify (`3849ba1`):**
+  `search?type=all|residential|commercial|pm` filter + `POST /customers/{kind}/{id}/convert {to}` to move a customer
+  residential↔commercial (best-effort name map; the editor tidies fields after). Also **`b956381`:** `/static/*` now
+  served `Cache-Control: no-cache` so redeployed bridges REVALIDATE (stale cached bridges had hidden the booking
+  text-button + the hub button — root cause of the repeated "needs a hard refresh"). Backend tested vs live DB (2,174 res
+  / 824 co). Tabs/reclassify **need a live spin**.
 
 > ▶▶ IMMEDIATE NEXT STEP — Wes's create-on-calendar flow (his "backwards" booking), then the rest of the backlog:
 > B. **Create-on-calendar → "finish in the app":** the app spots a calendar event with NO linked job, drops a
