@@ -248,6 +248,7 @@
         }
         btn.textContent = "✓ Booked (" + lane() + ") — event " + (j.gcal_event_id || "?") + " on TEST";
         btn.style.background = "#3CA03C";
+        saveCoLocation();                      // remember this commercial job site for next time
         uploadBookingPhotos(j && j.id, btn);   // best-effort: file the attached photos onto the job
         enableTextBtn(j && j.id);              // job now exists — light up the "text customer" button
       }).catch(function (e) {
@@ -293,6 +294,63 @@
         else { tb.disabled = false; tb.textContent = "Text failed — retry"; tb.style.background = "#C0392B"; }
       }).catch(function () { tb.disabled = false; tb.textContent = "Text failed — retry"; });
     };
+  }
+
+  /* ---- Commercial SAVED LOCATIONS (Wes): picking a company's saved site auto-fills THAT site's
+     address, and a site booked for the first time is remembered for next time. The address field is
+     the JOB LOCATION (never the account's billing address — see applyQBco), so this kills the retyping
+     without reintroducing the billing-address bug. ---- */
+  var _coAddrs = {};          // {location -> job address} for the currently-picked company
+  var _lastAutoAddr = null;   // the address WE filled, so we never clobber one the manager typed
+
+  function _lookupLoc(name) {
+    var v = String(name || "").trim().toLowerCase(), hit = null;
+    if (!v) return null;
+    Object.keys(_coAddrs).forEach(function (k) {
+      if (hit === null && String(k).trim().toLowerCase() === v) hit = _coAddrs[k];
+    });
+    return hit;
+  }
+  function wireAcctPick() {
+    var el = document.getElementById("acctPick");
+    if (!el || el.getAttribute("data-ij-wired")) return;
+    el.setAttribute("data-ij-wired", "1");   // the invoiced flow re-renders; only wire each element once
+    var fill = function () {
+      var hit = _lookupLoc(el.value);
+      if (!hit) return;   // a NEW site being typed — leave the address alone (it gets saved on booking)
+      var addr = document.getElementById("addr");
+      if (!addr) return;
+      if (addr.value.trim() && addr.value !== _lastAutoAddr) return;   // manager typed his own — keep it
+      addr.value = hit; _lastAutoAddr = hit;
+      try { if (typeof travUpdate === "function") travUpdate(); } catch (e) {}
+      try { if (typeof updateNearby === "function") updateNearby(); } catch (e) {}
+    };
+    el.addEventListener("input", fill);    // a datalist selection fires input
+    el.addEventListener("change", fill);
+  }
+  if (typeof applyQBco === "function") {   // classic sloppy-mode script: the global IS reassignable
+    var _applyQBco = applyQBco;
+    window.applyQBco = function (c) {
+      var r = _applyQBco.apply(this, arguments);
+      try { _coAddrs = (c && c.acctAddrs) || {}; _lastAutoAddr = null; wireAcctPick(); } catch (e) {}
+      return r;
+    };
+  }
+  function saveCoLocation() {
+    try {
+      if (lane() !== "invoiced") return;   // commercial lane only
+      var co = (val("company") || "").trim();
+      var loc = ((document.getElementById("acctPick") || {}).value || "").trim();
+      var addr = ((document.getElementById("addr") || {}).value || "").trim();
+      if (!co || !loc || !addr || _lookupLoc(loc) === addr) return;   // nothing new to remember
+      fetch("/customers/company-location", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company: co, location: loc, address: addr }),
+      }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (j && j.saved) _coAddrs[loc] = addr;   // keep this page's map fresh for the next booking
+      }).catch(function () {});
+    } catch (e) {}
   }
 
   /* "Job ready" popup extras (Wes): a note the manager writes for the CREW, plus a clear way back to

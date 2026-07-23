@@ -1342,13 +1342,16 @@ def apply_company_customers(db: DbSession, brand: Brand, data, actor: Employee) 
         if not co:
             continue
         accounts = rec.get("accounts") if isinstance(rec.get("accounts"), list) else None
+        # {location -> job address}; MERGED (never replaced) so a screen that only knows one
+        # location can't wipe the rest of the company's saved sites.
+        addrs = rec.get("acctAddrs") if isinstance(rec.get("acctAddrs"), dict) else None
         c = existing.get(company_key({"co": co}))
         if c is None:
             db.add(CompanyCustomer(
                 brand=brand, co=co[:180], name=(rec.get("name") or co)[:180],
                 contact=(rec.get("contact") or None), phone=(rec.get("phone") or None),
                 email=(rec.get("email") or None), addr=(rec.get("addr") or None),
-                accounts=accounts or [], src=CustomerSource.app))
+                accounts=accounts or [], account_addrs=addrs or {}, src=CustomerSource.app))
             added += 1
         else:
             if rec.get("contact"):
@@ -1361,6 +1364,8 @@ def apply_company_customers(db: DbSession, brand: Brand, data, actor: Employee) 
                 c.addr = rec["addr"]
             if accounts is not None:
                 c.accounts = accounts
+            if addrs:
+                c.account_addrs = {**(c.account_addrs or {}), **addrs}
             updated += 1
     db.commit()
     return {"added": added, "matched": updated, "note": "upsert-only (no deletes)"}

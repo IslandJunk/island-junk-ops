@@ -348,7 +348,11 @@ def build_company_customers_v1(db: DbSession, brand: Brand) -> list | None:
         return None
     return [{"id": str(r.id), "co": r.co, "name": r.name or r.co, "addr": r.addr or "",
              "contact": r.contact or "", "phone": r.phone or "", "email": r.email or "",
-             "accounts": list(r.accounts or []), "src": r.src.value} for r in rows]
+             "accounts": list(r.accounts or []),
+             # {location -> that site's job address}; the booking screen auto-fills the address
+             # when a saved location is picked (see booking-bridge.js).
+             "acctAddrs": dict(r.account_addrs or {}),
+             "src": r.src.value} for r in rows]
 
 
 def build_pm_db_v2(db: DbSession, brand: Brand) -> list | None:

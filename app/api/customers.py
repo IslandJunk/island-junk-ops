@@ -234,3 +234,46 @@ def convert_customer(kind: str, cid: str, body: ConvertIn, request: Request,
 
     db.commit()
     return {"ok": True, "kind": new_kind, "id": str(new_id)}
+
+
+class CoLocationIn(BaseModel):
+    company: str
+    location: str
+    address: str
+
+
+@router.post("/company-location")
+def save_company_location(body: CoLocationIn, request: Request, db: DbSession = Depends(get_db),
+                          emp: Employee = Depends(require_manager)) -> dict:
+    """Remember a commercial account's job SITE: `{company, location, address}`.
+
+    Called after a commercial booking, so next time the manager picks that saved location the job
+    address fills itself instead of being retyped. Matched on the company name the same
+    case-insensitive way the sync upsert dedupes. Additive only: the location is appended to
+    `accounts` if new, and `account_addrs[location]` is set — no other site is touched, and this
+    never creates a company (an unknown name is reported back, not silently invented).
+    """
+    brand = active_brand_for(request, emp)
+    company = (body.company or "").strip()
+    location = (body.location or "").strip()
+    address = (body.address or "").strip()
+    if not (company and location and address):
+        return {"saved": False, "detail": "company, location and address are all required"}
+
+    c = db.scalar(
+        select(CompanyCustomer).where(
+            CompanyCustomer.brand == brand, func.lower(CompanyCustomer.co) == company.lower()
+        )
+    )
+    if c is None:
+        return {"saved": False, "detail": f"no commercial account named {company!r}"}
+
+    accounts = list(c.accounts or [])
+    is_new = not any((a or "").strip().lower() == location.lower() for a in accounts)
+    if is_new:
+        accounts.append(location)
+        c.accounts = accounts
+    # dict must be REPLACED (not mutated) for SQLAlchemy to flag the JSONB column as dirty
+    c.account_addrs = {**(c.account_addrs or {}), location: address}
+    db.commit()
+    return {"saved": True, "company": c.co, "location": location, "new_location": is_new}

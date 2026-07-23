@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import ForeignKey, String
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import ForeignKey, String, text as sa_text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, BrandScopedMixin, TimestampMixin, UUIDPkMixin
@@ -38,6 +38,12 @@ class CompanyCustomer(Base, UUIDPkMixin, TimestampMixin, BrandScopedMixin):
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     email: Mapped[str | None] = mapped_column(String(180), nullable=True)
     accounts: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)  # departments/locations
+    # {location name -> that site's JOB address}. Purely ADDITIVE to `accounts` (which stays the plain
+    # name list every other reader uses), so picking a saved location can auto-fill the address the
+    # crew drive to — instead of the manager retyping it on every booking.
+    account_addrs: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sa_text("'{}'::jsonb")
+    )
     src: Mapped[CustomerSource] = mapped_column(customer_source_enum, nullable=False, default=CustomerSource.app)
 
 
