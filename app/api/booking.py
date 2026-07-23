@@ -42,6 +42,7 @@ class BookingIn(BaseModel):
     time_end: time | None = None
     headline: str | None = None
     notes: str | None = None
+    crew_note: str | None = None       # manager's note from the "Job ready" popup -> the event's NOTES:
     into_event_id: str | None = None   # complete a manager-made calendar event in place (backwards booking)
 
 

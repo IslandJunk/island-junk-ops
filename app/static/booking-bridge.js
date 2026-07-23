@@ -168,6 +168,7 @@
       time_end: parseEnd() || (pf && pf.time_end) || null,
       headline: headlineFromBody(),
       notes: (document.querySelector("#mBody") || {}).textContent || null,
+      crew_note: ((document.querySelector("#ijCrewNote") || {}).value || "").trim() || null,
       into_event_id: (pf && pf.into_event_id) || null,   // complete THIS event in place, no duplicate
     };
   }
@@ -294,12 +295,69 @@
     };
   }
 
+  /* "Job ready" popup extras (Wes): a note the manager writes for the CREW, plus a clear way back to
+     the form. Injected OUTSIDE #mBody on purpose — the bridge reads #mBody.textContent for the
+     CALENDAR HEADLINE and sends it verbatim as the booking's notes, so that element must stay
+     byte-identical. The note rides to the server as crew_note and is written under the event's
+     NOTES: line, which the Day Board reads back — so the crew see it without the manager having to
+     go and type it on Google Calendar afterwards. */
+  function addCrewNote() {
+    var modal = document.querySelector("#ovl .modal");
+    if (!modal || modal.querySelector("#ijNoteWrap")) return;
+    var body = modal.querySelector("#mBody"); if (!body) return;
+    var wrap = document.createElement("div");
+    wrap.id = "ijNoteWrap";
+    wrap.style.cssText = "margin:13px 0 2px";
+    wrap.innerHTML =
+      '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a827a;margin-bottom:5px">'
+      + 'Note for the crew <span style="font-weight:600;text-transform:none;letter-spacing:0">— optional, shows on their job</span></div>'
+      + '<textarea id="ijCrewNote" rows="2" placeholder="e.g. gate code 1234, park in the back lane, dog on site" '
+      + 'style="width:100%;box-sizing:border-box;padding:10px 11px;border:1.5px solid #e0dcd5;border-radius:10px;'
+      + 'font-family:inherit;font-size:13.5px;line-height:1.45;resize:vertical"></textarea>'
+      + '<div style="font-size:11.5px;color:#8a827a;margin-top:7px;line-height:1.45">Spotted a mistake? '
+      + '<button type="button" id="ijEditJob" style="background:none;border:none;padding:0;font:inherit;font-weight:800;'
+      + 'color:#F05014;text-decoration:underline;cursor:pointer">Go back and edit the job</button> — your details are kept.</div>';
+    body.parentNode.insertBefore(wrap, body.nextSibling);
+    var ed = wrap.querySelector("#ijEditJob");
+    if (ed) ed.onclick = function () { var o = document.querySelector("#ovl"); if (o) o.classList.remove("show"); };
+  }
+
+  /* The modal is ONE shared element, so these injected controls persist between jobs. Without this
+     reset a SECOND booking in the same session reopened with the Book-it button still disabled and
+     reading "Booked" (and the previous job's note still typed in) — the manager had to reload. */
+  function resetModalExtras() {
+    var b = document.querySelector("#ijBookBtn");
+    if (b) { b.disabled = false; b.style.background = "#F05014"; b.textContent = "Book it — writes to TEST calendar"; }
+    var tb = document.querySelector("#ijTextBtn");
+    if (tb) {
+      tb.disabled = true; tb.style.background = "#E8A317"; tb.style.opacity = ".5";
+      tb.textContent = "Text customer (after booking)"; tb.onclick = null;
+    }
+    var ta = document.querySelector("#ijCrewNote");
+    if (ta) ta.value = "";
+  }
+  function showModalExtras(on) {   // keep them off the "Still need…" / confirmation modals
+    ["#ijBookBtn", "#ijTextBtn", "#ijNoteWrap"].forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (el) el.style.display = on ? "" : "none";
+    });
+  }
+
   var ovl = document.querySelector("#ovl");
   if (ovl) {
+    var wasShown = false;
     new MutationObserver(function () {
-      if (!ovl.classList.contains("show")) return;
+      var shown = ovl.classList.contains("show");
+      if (!shown) { wasShown = false; return; }
       var t = document.querySelector("#mTitle");
-      if (t && /job ready/i.test(t.textContent)) addBookBtn();
+      var ready = !!(t && /job ready/i.test(t.textContent));
+      if (ready) {
+        addBookBtn();
+        addCrewNote();
+        if (!wasShown) resetModalExtras();   // hidden -> shown = a NEW summary: clear the last job's state
+      }
+      showModalExtras(ready);
+      wasShown = true;
     }).observe(ovl, { attributes: true, attributeFilter: ["class"] });
   }
 })();

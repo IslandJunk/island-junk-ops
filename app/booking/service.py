@@ -117,6 +117,12 @@ def _description(job: Job) -> str:
         lines.append(f"Photos: {link}")   # tap in Calendar -> the job's photo folder
     lines.append("")
     lines.append("NOTES:")   # manager adds notes here on Calendar; the crew see them on the job
+    crew_note = ((job.details or {}).get("crew_note") or "").strip()
+    if crew_note:
+        # Typed in the "Job ready" popup at booking. Seeding the section (rather than leaving it
+        # empty) means manager_notes_from_desc picks it up immediately -> the crew see it on the
+        # Day Board without the manager opening Google Calendar. They can still add more below it.
+        lines.append(crew_note)
     return "\n".join(lines)
 
 
@@ -130,6 +136,7 @@ def create_booking(
     est_price: Decimal | None = None, crew: list[str] | None = None,
     time_start: time | None = None, time_end: time | None = None, notes: str | None = None,
     headline: str | None = None, write_calendar: bool = True, into_event_id: str | None = None,
+    crew_note: str | None = None,
 ) -> Job:
     # Use the caller's headline verbatim if given (the booking UI stamps its own,
     # matching the prototype exactly); otherwise build the standard format.
@@ -140,6 +147,11 @@ def create_booking(
         customer_email=customer_email, address=address, town=town, scope=scope, est_price=est_price,
         crew=crew, time_start=time_start, time_end=time_end, headline=headline, notes=notes,
     )
+    if crew_note and crew_note.strip():
+        # The manager's note from the "Job ready" popup. It rides into the event's NOTES: section
+        # (see _description), which day_board reads back — so the crew see it on the job right away,
+        # instead of the manager having to type it under NOTES: on Google Calendar afterwards.
+        job.details = {**(job.details or {}), "crew_note": crew_note.strip()}
     db.add(job)
     db.flush()  # assign job.id for the description
     try:   # Dropbox per-job folder + shared link — best-effort, dry-run/no-op until connected
