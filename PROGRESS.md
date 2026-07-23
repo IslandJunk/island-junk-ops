@@ -1,8 +1,21 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-23 (⭐ RESUME POINT — backwards-booking chain VERIFIED end-to-end + Wes LIVE-SPUN it (address carries over ✓); NEW "From the calendar" side panel copies the event's name/phone/notes beside the booking form; NEXT: background finish-link poll, then rest of backlog / Dropbox 1c)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`e117c13`** (code), migration head
-**`d7a3f9c2e1b8`** (unchanged), prod at `island-junk-ops.onrender.com`.
+**2026-07-23 (⭐ RESUME POINT — BACKWARDS BOOKING COMPLETE: live-spun ✓ + "From the calendar" side panel + background finish-link poll all DONE & deployed; NEXT: rest of the booking backlog / Dropbox 1c)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`1ac8d15`** (code), migration head
+**`d7a3f9c2e1b8`** (unchanged — no migration this session), prod at `island-junk-ops.onrender.com`.
+
+- **NEW — background finish-link poll (`1ac8d15`; deployed, no migration):** a FastAPI **lifespan loop** (same pattern as the
+  QBO auto-sync — no separate cron service) stamps the "▶ Finish this booking in the app" link onto hand-made, not-yet-booked
+  TEST-cal events for the **next 14 days, every 15 min**, so the manager sees it in Google Calendar without anyone opening that
+  day's Day Board first (`read_day` only stamps the day it reads). `day_board.poll_finish_links` + new
+  `app/dispatch/scheduler.py`; knobs `finish_link_poll_enabled | _seconds | _days` in config (**set `_enabled=false` to stop it**).
+  **Deliberately narrow:** same guarded write path (`gcal.update_event` → `_assert_test_calendar`) so it can NEVER touch the two
+  live calendars; **description-only** — never title/colour/time, so **Make.com's status-colour signal is untouched**; hand-made
+  + unbooked events only; **idempotent**; no-op when disabled; errors swallowed so the loop can't crash the app.
+  `_stamp_finish_links` now returns a stamped count (`read_day` ignores it) so the poll logs only on a real write.
+  **Verified end-to-end on the TEST calendar** with a throwaway hand-made event (stamped ✓, manager's notes kept ✓,
+  title/colour/location untouched ✓, second poll a no-op ✓, event deleted ✓) + the guard proven to **REFUSE** `LIVE_VICTORIA` /
+  `LIVE_JOBS2` / `primary`. Log line on Render: `finish-link-poll: {...}` (only when it stamps something).
 
 - **Backwards booking LIVE-SPUN by Wes — the address carries over from the calendar Location field ✓.** Before the spin the
   whole chain was re-verified statically (browser tooling hangs on the booking prototype → esprima + Python logic mirrors): the
@@ -98,14 +111,13 @@
   now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
   were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — **build the background finish-link poll** (Wes's pick). Today `_stamp_finish_links`
-> (`day_board.read_day`) only stamps the "▶ Finish this booking" link onto a hand-made event when someone OPENS that day's
-> Day Board. The poll stamps it hands-off: mirror the QuickBooks auto-sync pattern (`app/quickbooks/scheduler.py` — a FastAPI
-> lifespan loop, no separate cron) with a periodic task that lists the next N days on the TEST calendar and stamps any
-> unstamped hand-made, not-yet-booked event (reuse `_stamp_finish_links`; same `_assert_test_calendar`-guarded `gcal` path).
-> **DONE this session:** the live-spin ✓ (Wes confirmed the address carries over) + the "From the calendar" side panel
-> (`e117c13`). THEN the rest of the backlog: **E.** "Job ready" note/edit step · tune the name auto-fill if Wes wants ·
-> saved-commercial-location addresses (the **C.** quick-pick is largely covered by the existing search-as-you-type pickers).
+> ▶▶ IMMEDIATE NEXT STEP — **backwards booking is COMPLETE + deployed** (live-spin ✓, side panel `e117c13`, background poll
+> `1ac8d15`). Pick up the rest of the booking backlog: **E.** a **note / edit step in the "Job ready" popup** — the popup is
+> already scannable, so this adds a manager NOTE that flows into the event's `NOTES:` section + a way to edit a field before
+> Book it · **tune the name auto-fill** if Wes wants it to try harder than "copy it off the side panel" ·
+> **saved-commercial-location addresses** — pick a saved company site → auto-fill its address, auto-create the account for a new
+> site (the remaining half of D). (**C.** quick-pick is largely covered by the existing search-as-you-type pickers.)
+> **Watch after this deploy:** the poll prints `finish-link-poll: {...}` in the Render log ONLY when it actually stamps an event.
 > (**D. commercial
 > COMPANY vs JOB-LOCATION split DONE** `a9b4ddd` — picking a known company was dumping its BILLING address into the
 > address field; now applyQBco fills contact/billing only, the address is the JOB LOCATION, billing stays off the
