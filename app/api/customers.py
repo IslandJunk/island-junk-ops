@@ -94,48 +94,57 @@ def _pmb_row(c: PmBuilding) -> dict:
             "phone": c.phone, "email": c.email, "address": c.address}
 
 
+_RES_TYPES = {"all", "residential", "res"}
+_CO_TYPES = {"all", "commercial", "company", "co"}
+_PM_TYPES = {"all", "pm", "property_mgmt", "pm_company"}
+
+
 @router.get("/search")
-def search(request: Request, q: str = "", limit: int = 40,
+def search(request: Request, q: str = "", type: str = "all", limit: int = 40,
            db: DbSession = Depends(get_db), emp: Employee = Depends(require_manager)) -> dict:
-    """Owner + manager: one search box across residential / commercial / PM customers. Empty q browses
-    the first N of each (PM buildings only surface on an actual query — there can be a lot of them)."""
+    """Owner + manager: search customers, optionally filtered to one `type` tab
+    (all | residential | commercial | pm). Empty q browses the first N; PM buildings only surface on
+    an actual query (there can be a lot of them)."""
     brand = active_brand_for(request, emp)
     limit = max(1, min(limit, 100))
     q = (q or "").strip()
+    want = (type or "all").strip().lower()
     like = f"%{q}%"
     out: list[dict] = []
 
-    rs = select(ResidentialCustomer).where(ResidentialCustomer.brand == brand)
-    if q:
-        rs = rs.where(or_(
-            ResidentialCustomer.first.ilike(like), ResidentialCustomer.last.ilike(like),
-            func.concat(func.coalesce(ResidentialCustomer.first, ""), " ",
-                        func.coalesce(ResidentialCustomer.last, "")).ilike(like),
-            ResidentialCustomer.phone.ilike(like), ResidentialCustomer.email.ilike(like),
-            ResidentialCustomer.addr.ilike(like)))
-    out += [_res_row(c) for c in db.scalars(rs.order_by(ResidentialCustomer.first).limit(limit)).all()]
+    if want in _RES_TYPES:
+        rs = select(ResidentialCustomer).where(ResidentialCustomer.brand == brand)
+        if q:
+            rs = rs.where(or_(
+                ResidentialCustomer.first.ilike(like), ResidentialCustomer.last.ilike(like),
+                func.concat(func.coalesce(ResidentialCustomer.first, ""), " ",
+                            func.coalesce(ResidentialCustomer.last, "")).ilike(like),
+                ResidentialCustomer.phone.ilike(like), ResidentialCustomer.email.ilike(like),
+                ResidentialCustomer.addr.ilike(like)))
+        out += [_res_row(c) for c in db.scalars(rs.order_by(ResidentialCustomer.first).limit(limit)).all()]
 
-    cs = select(CompanyCustomer).where(CompanyCustomer.brand == brand)
-    if q:
-        cs = cs.where(or_(CompanyCustomer.co.ilike(like), CompanyCustomer.name.ilike(like),
-                          CompanyCustomer.contact.ilike(like), CompanyCustomer.phone.ilike(like),
-                          CompanyCustomer.email.ilike(like), CompanyCustomer.addr.ilike(like)))
-    out += [_co_row(c) for c in db.scalars(cs.order_by(CompanyCustomer.co).limit(limit)).all()]
+    if want in _CO_TYPES:
+        cs = select(CompanyCustomer).where(CompanyCustomer.brand == brand)
+        if q:
+            cs = cs.where(or_(CompanyCustomer.co.ilike(like), CompanyCustomer.name.ilike(like),
+                              CompanyCustomer.contact.ilike(like), CompanyCustomer.phone.ilike(like),
+                              CompanyCustomer.email.ilike(like), CompanyCustomer.addr.ilike(like)))
+        out += [_co_row(c) for c in db.scalars(cs.order_by(CompanyCustomer.co).limit(limit)).all()]
 
-    ps = select(PmCompany).where(PmCompany.brand == brand)
-    if q:
-        ps = ps.where(or_(PmCompany.nm.ilike(like), PmCompany.contact.ilike(like),
-                          PmCompany.phone.ilike(like), PmCompany.email.ilike(like), PmCompany.addr.ilike(like)))
-    out += [_pmco_row(c) for c in db.scalars(ps.order_by(PmCompany.nm).limit(limit)).all()]
-
-    if q:  # buildings are the leaf sites — only when searching (there can be many)
-        bs = select(PmBuilding).where(PmBuilding.brand == brand).where(or_(
-            PmBuilding.name.ilike(like), PmBuilding.address.ilike(like),
-            PmBuilding.contact.ilike(like), PmBuilding.phone.ilike(like), PmBuilding.email.ilike(like)))
-        out += [_pmb_row(c) for c in db.scalars(bs.limit(limit)).all()]
+    if want in _PM_TYPES:
+        ps = select(PmCompany).where(PmCompany.brand == brand)
+        if q:
+            ps = ps.where(or_(PmCompany.nm.ilike(like), PmCompany.contact.ilike(like),
+                              PmCompany.phone.ilike(like), PmCompany.email.ilike(like), PmCompany.addr.ilike(like)))
+        out += [_pmco_row(c) for c in db.scalars(ps.order_by(PmCompany.nm).limit(limit)).all()]
+        if q:  # buildings are the leaf sites — only when searching
+            bs = select(PmBuilding).where(PmBuilding.brand == brand).where(or_(
+                PmBuilding.name.ilike(like), PmBuilding.address.ilike(like),
+                PmBuilding.contact.ilike(like), PmBuilding.phone.ilike(like), PmBuilding.email.ilike(like)))
+            out += [_pmb_row(c) for c in db.scalars(bs.limit(limit)).all()]
 
     out.sort(key=lambda r: (r["name"] or "").lower())
-    return {"brand": brand.value, "count": len(out), "results": out[: limit * 2]}
+    return {"brand": brand.value, "type": want, "count": len(out), "results": out[: limit * 2]}
 
 
 class CustomerPatch(BaseModel):
@@ -180,3 +189,48 @@ def update_customer(kind: str, cid: str, body: CustomerPatch, request: Request,
             setattr(c, attr, (patch[field] or None) if isinstance(patch[field], str) else patch[field])
     db.commit()
     return {"ok": True, "kind": kind, "id": cid}
+
+
+class ConvertIn(BaseModel):
+    to: str   # "commercial" | "residential"
+
+
+@router.post("/{kind}/{cid}/convert")
+def convert_customer(kind: str, cid: str, body: ConvertIn, request: Request,
+                     db: DbSession = Depends(get_db), emp: Employee = Depends(require_manager)) -> dict:
+    """Owner + manager: reclassify a customer between RESIDENTIAL and COMMERCIAL (fix a bad import).
+    Recreates the record in the other table with a best-effort field mapping, deletes the original,
+    and returns the new kind + id. Name mapping is imprecise (person name ↔ company name), so the
+    editor can be reopened to tidy fields afterward."""
+    brand = active_brand_for(request, emp)
+    to = (body.to or "").strip().lower()
+    try:
+        oid = uuid.UUID(cid)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "customer not found")
+
+    if kind == "residential" and to in ("commercial", "company"):
+        c = db.get(ResidentialCustomer, oid)
+        if c is None or c.brand != brand:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "customer not found")
+        name = " ".join(x for x in [c.first, c.last] if x).strip() or "(unnamed)"
+        new = CompanyCustomer(brand=brand, co=name, name=name, addr=c.addr, phone=c.phone,
+                              email=c.email, contact=None, accounts=[])
+        db.add(new); db.delete(c); db.flush()
+        new_kind, new_id = "company", new.id
+    elif kind == "company" and to in ("residential", "res"):
+        c = db.get(CompanyCustomer, oid)
+        if c is None or c.brand != brand:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "customer not found")
+        parts = (c.co or "").split()
+        first = parts[0] if parts else (c.co or None)
+        last = " ".join(parts[1:]) if len(parts) > 1 else None
+        new = ResidentialCustomer(brand=brand, first=first, last=last, phone=c.phone,
+                                  email=c.email, addr=c.addr)
+        db.add(new); db.delete(c); db.flush()
+        new_kind, new_id = "residential", new.id
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "only residential ↔ commercial conversion is supported")
+
+    db.commit()
+    return {"ok": True, "kind": new_kind, "id": str(new_id)}
