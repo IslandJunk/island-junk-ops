@@ -77,6 +77,7 @@ def _prefill_from_event(ev: dict) -> dict:
     start, end = ev.get("start") or {}, ev.get("end") or {}
     return {
         "event_id": ev.get("id"), "title": ev.get("summary") or "", "description": ev.get("description") or "",
+        "address": ev.get("location") or None,   # Google Calendar's Location field (Wes puts the address there)
         "on_date": (start.get("dateTime", "")[:10] or start.get("date") or None),
         "time_start": (start.get("dateTime", "")[11:16] or None),
         "time_end": (end.get("dateTime", "")[11:16] or None),

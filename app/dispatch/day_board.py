@@ -55,11 +55,16 @@ def build_day_board(events: list[dict], colour_by_id: dict[int, ColourMap],
     trucks: dict[str, list] = {}
     status: dict[str, list] = {}
     unassigned: list = []
-    notes_dropped = 0
+    notes: list = []
 
     for ev in events:
-        if is_manager_note(ev.get("summary", "")):   # §4 — first, before anything else
-            notes_dropped += 1
+        if is_manager_note(ev.get("summary", "")):   # §4 — a `#` manager note, not a job (kept for the notes view)
+            notes.append({
+                "event_id": ev.get("id"),
+                "raw": ev.get("summary") or "",
+                "title": (ev.get("summary") or "").lstrip().lstrip("#").strip(),
+                "description": ev.get("description") or "",
+            })
             continue
         cid = ev.get("colorId")
         colour = colour_by_id.get(int(cid)) if cid else None
@@ -81,7 +86,8 @@ def build_day_board(events: list[dict], colour_by_id: dict[int, ColourMap],
         "trucks": trucks,
         "status": status,
         "unassigned": unassigned,
-        "notes_dropped": notes_dropped,
+        "notes": notes,
+        "notes_dropped": len(notes),
         "counts": {
             "trucks": {k: len(v) for k, v in trucks.items()},
             "status": {k: len(v) for k, v in status.items()},

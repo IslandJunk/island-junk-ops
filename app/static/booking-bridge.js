@@ -305,27 +305,69 @@
 })();
 
 /* Backwards booking: /app/new-booking?event=<id> completes a HAND-MADE calendar event in place.
-   Fetch the event's pre-fill, stash it for payload() (which then sends into_event_id + the event's own
-   date/time), and show a banner. The manager still picks the job type and fills the details. */
+   Asks Residential vs Commercial, opens that flow, pre-fills the date + time (via payload) + the event's
+   Location as the address, and shows the title/notes so the manager copies the name in. payload() sends
+   into_event_id, so Book it fills the SAME event (no duplicate). */
 (function () {
   var m = /[?&]event=([^&]+)/.exec(location.search || "");
   if (!m) return;
   var eventId = decodeURIComponent(m[1]);
-  function banner(text, color) {
-    var b = document.createElement("div");
-    b.style.cssText = "position:sticky;top:0;z-index:8000;background:" + color + ";color:#fff;font-weight:700;"
-      + "font-size:13px;padding:10px 14px;line-height:1.45";
-    b.textContent = text;
-    if (document.body) document.body.insertBefore(b, document.body.firstChild);
-  }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
   fetch("/booking/from-event/" + encodeURIComponent(eventId), { credentials: "same-origin" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (p) {
-      if (!p) { banner("Couldn't load that calendar event.", "#C0392B"); return; }
-      if (p.already_booked) { banner("This calendar event is already booked in the app.", "#C0392B"); return; }
-      window.__ijEventPrefill = { into_event_id: eventId, on_date: p.on_date, time_start: p.time_start, time_end: p.time_end, title: p.title };
-      banner("Finishing a calendar event: “" + (p.title || "(untitled)") + "”"
-        + (p.on_date ? (" · " + p.on_date) : "") + " — pick the job type and fill it in; Book it completes THIS event (no duplicate).", "#F05014");
+      if (!p) { alert("Couldn't load that calendar event."); return; }
+      if (p.already_booked) { alert("This calendar event is already booked in the app."); return; }
+      window.__ijEventPrefill = { into_event_id: eventId, on_date: p.on_date, time_start: p.time_start,
+        time_end: p.time_end, title: p.title, address: p.address, description: p.description };
+      showPrompt(p);
     })
     .catch(function () {});
+
+  function showPrompt(p) {
+    var info = [p.title && "<b>" + esc(p.title) + "</b>",
+      p.on_date && ("Date: " + esc(p.on_date) + (p.time_start ? (" · " + esc(p.time_start) + (p.time_end ? ("–" + esc(p.time_end)) : "")) : "")),
+      p.address && ("Address: " + esc(p.address)),
+      p.description && ("Notes: " + esc(p.description))].filter(Boolean).join("<br>");
+    var ov = document.createElement("div");
+    ov.id = "ijFinishPrompt";
+    ov.style.cssText = "position:fixed;inset:0;z-index:9500;background:rgba(20,20,20,.72);display:flex;align-items:center;justify-content:center;padding:18px";
+    var card = document.createElement("div");
+    card.style.cssText = "background:#fff;color:#141414;border-radius:16px;max-width:440px;width:100%;padding:20px;font-family:Inter,system-ui,sans-serif";
+    card.innerHTML =
+      '<div style="font-family:Anton,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-size:21px;margin-bottom:8px">Finish this booking</div>'
+      + '<div style="font-size:12.5px;color:#666;line-height:1.5;margin-bottom:8px">From your calendar event — the date, time and address carry over. Copy the customer name into the form.</div>'
+      + '<div style="background:#F4F3F1;border-radius:10px;padding:11px 12px;font-size:13px;line-height:1.65;margin-bottom:16px">' + (info || "(no details on the event)") + '</div>'
+      + '<div style="font-weight:800;font-size:13px;margin-bottom:9px">Is this residential or commercial?</div>'
+      + '<div style="display:flex;gap:10px"><button id="ijPickRes" style="flex:1;padding:14px;border:none;border-radius:11px;background:#3CA03C;color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">Residential</button>'
+      + '<button id="ijPickComm" style="flex:1;padding:14px;border:none;border-radius:11px;background:#F05014;color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">Commercial</button></div>';
+    ov.appendChild(card);
+    if (document.body) document.body.appendChild(ov);
+    var res = document.getElementById("ijPickRes"), comm = document.getElementById("ijPickComm");
+    if (res) res.onclick = function () { pick("collect"); };
+    if (comm) comm.onclick = function () { pick("invoiced"); };
+  }
+
+  function pick(type) {
+    var ov = document.getElementById("ijFinishPrompt"); if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+    var pf = window.__ijEventPrefill || {};
+    try { if (typeof openType === "function") openType(type); } catch (e) {}
+    var ref = [pf.title, pf.description].filter(Boolean).join(" · ");   // sticky reference for copying the name
+    if (ref && document.body) {
+      var b = document.createElement("div");
+      b.style.cssText = "position:sticky;top:0;z-index:8000;background:#141414;color:#fff;font-size:12.5px;padding:8px 14px;line-height:1.4";
+      b.textContent = "Calendar event — copy the name/details in: " + ref;
+      document.body.insertBefore(b, document.body.firstChild);
+    }
+    setTimeout(function () {   // fill after the flow has rendered + its wire set bookDate
+      try {
+        if (pf.on_date && typeof bookDate !== "undefined") {
+          try { bookDate = new Date(pf.on_date + "T00:00:00"); if (typeof bookMoved !== "undefined") bookMoved = true; if (typeof paintDate === "function") paintDate(); } catch (e) {}
+        }
+        var addr = document.getElementById("addr"); if (addr && pf.address && !addr.value) addr.value = pf.address;
+        var scope = document.getElementById("scope"); if (scope && pf.title && !scope.value) scope.value = pf.title;
+      } catch (e) {}
+    }, 50);
+  }
 })();
