@@ -1,7 +1,20 @@
 # Island Junk — Build Progress & Handoff
 
-**2026-07-23 (⭐ RESUME POINT — booking backlog DONE + **Dropbox Phase 1c** shipped (the job's Dropbox folder is now the photo store); NEXT: live-verify 1c on prod, then Dropbox Phase 2/3)** —
-**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`ea60df0`** (code), migration head
+**2026-07-23 (⭐ RESUME POINT — booking backlog DONE + Dropbox **1c** (job folder = the photo store) and **Phase 2** (crew capture) shipped; NEXT: live-verify 1c+2 on prod, then Phase 3)** —
+**START HERE.** Everything below is done, committed, and deployed. Repo clean, HEAD **`428b72d`** (code), migration head
+
+- **NEW — Dropbox Phase 2: crew capture (`428b72d`; no migration).** The Day Board stop already SHOWED the job's photos;
+  now the crew can **ADD** one — "+ Add a photo to this job" on the stop panel, `capture="environment"` so a phone opens
+  the camera straight away, multi-select, **client-side downscale to 1600px @ q0.7** (a raw phone JPEG is several MB, over
+  the server cap, and slow on a truck's signal). It files into the SAME per-job Dropbox folder as everything else, so the
+  office + the calendar link see it immediately, and the strip **re-reads the folder** after upload so what's shown is what
+  actually landed. The panel now renders even when a job has **no** photos (it used to remove itself when empty, which
+  would have hidden the new button on exactly the jobs that need it most). Tiles use the Dropbox thumbnail; a tap still
+  opens the full photo. **Deliberately ADDITIVE — the crew's before/after habit stays in Messenger (locked design rule);
+  this is for what has to land on the RECORD:** damage, access problems, proof, a bin left somewhere awkward.
+  Verified: 16 DOM cases in a harness (incl. a real 3000×2000 image downscaled to 1600px with aspect kept, jpeg data-url,
+  right job targeted, button restores, strip refreshes, thumb tile vs full-photo tap); esprima-clean.
+
 **`e3b1c7a4d9f2`** (`company_customer.account_addrs`; already applied to prod, so the Render deploy's migrate step
 is a no-op — 1c needed NO migration), prod at `island-junk-ops.onrender.com`.
 
@@ -168,13 +181,15 @@ is a no-op — 1c needed NO migration), prod at `island-junk-ops.onrender.com`.
   now 307-redirects to `/app/<slug>` (`_FILE_TO_SLUG`), fixing the manager hub's whole "Open a tool" section (Day Board &c
   were 404ing). Backend all tested; bridges esprima-clean; **needs Wes's live end-to-end spin.**
 
-> ▶▶ IMMEDIATE NEXT STEP — **live-verify Dropbox 1c on prod** (its Dropbox calls could only be stubbed locally; the creds
-> are Render-only). Book a job → attach a photo at booking → open that stop on the Day Board: the **Reference photos** strip
-> should show it. Then drop a photo straight into that job's Dropbox folder (via the calendar event's link) and reopen the
-> stop — **it should appear in the strip too, with no upload through the app**. That last one is the whole point of 1c.
-> If the strip is empty, check the Render log for `job_photos` warnings — the fallbacks are deliberately silent to the user
-> but LOUD in the log (`dropbox list failed…` / `dropbox upload failed…`), which names the wrong API call directly.
-> THEN **Dropbox Phase 2** (crew capture) + **Phase 3** (yard + bin truck; bin damage → bin folder + alert).
+> ▶▶ IMMEDIATE NEXT STEP — **live-verify Dropbox 1c + Phase 2 on prod** (their Dropbox calls could only be STUBBED locally;
+> the app key/secret are Render-only). One pass covers both: book a job → attach a photo at booking → open that stop on the
+> Day Board and the **Job photos** strip should show it → tap **"+ Add a photo to this job"** and snap one (Phase 2) → it
+> should appear in the strip → finally drop a photo **straight into that job's Dropbox folder** via the calendar event's
+> link and reopen the stop: **it should appear too, with no upload through the app** — that last one is the whole point of
+> 1c. If the strip is empty, check the Render log for `job_photos` warnings — the fallbacks are deliberately silent to the
+> user but LOUD in the log (`dropbox list failed…` / `dropbox upload failed…`), which names the failing call directly.
+> THEN **Dropbox Phase 3** (yard + bin truck; bin damage → the BIN's folder + an alert — note that's a bin-scoped folder,
+> not the per-job one, so it needs its own path helper).
 > Small optional leftovers, only if Wes asks: **tune the name auto-fill** (smarter than copying off the "From the calendar"
 > panel) · **auto-create a commercial account** for a company that isn't on file yet (today the location save refuses an
 > unknown company by design rather than inventing one) · (**C.** quick-pick is largely covered by the existing pickers) ·
