@@ -198,33 +198,107 @@
     im.style.cssText = "max-width:100%;max-height:100%;border-radius:8px";
     ov.appendChild(im); document.body.appendChild(ov);
   }
+  // Downscale a picked/snapped photo before upload — a phone camera JPEG is several MB and the
+  // server caps each photo; 1600px @ q0.7 is plenty for a job record and uploads on a truck's signal.
+  function compressPhotoFile(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var maxDim = 1600, w = img.width || 1, h = img.height || 1;
+          var s = Math.min(1, maxDim / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+          var c = document.createElement("canvas"); c.width = cw; c.height = ch;
+          c.getContext("2d").drawImage(img, 0, 0, cw, ch);
+          try { resolve(c.toDataURL("image/jpeg", 0.7)); } catch (e) { reject(e); }
+        };
+        img.onerror = reject;
+        img.src = fr.result;
+      };
+      fr.onerror = reject;
+      fr.readAsDataURL(file);
+    });
+  }
+
+  /* Job photos on the stop the crew are standing at: the strip (manager's reference shots + anything
+     dropped straight into the job's Dropbox folder) AND — Phase 2 — crew capture, which files a photo
+     into that SAME folder, so the office and the calendar link see it immediately.
+     Deliberately ADDITIVE: the crew's before/after habit stays in Messenger (locked design rule);
+     this is for what has to land on the job record — damage, access, proof — without leaving the app. */
   function injectPhotos() {
     var cur = (typeof CURRENT !== "undefined") ? CURRENT : null;
     var ow = document.getElementById("owBtn");
     if (!cur || !cur.job_id || !ow || document.getElementById("ijPhotoWrap")) return;
+    var jobId = cur.job_id;
     var wrap = document.createElement("div");
     wrap.id = "ijPhotoWrap"; wrap.style.cssText = "margin:4px 0 12px";
     ow.parentNode.insertBefore(wrap, ow);   // above the "on our way" button
-    fetch("/jobs/" + encodeURIComponent(cur.job_id) + "/photos", { credentials: "same-origin" })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (res) {
-        var photos = (res && res.photos) || [];
-        if (!photos.length) { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); return; }
-        var lbl = document.createElement("div");
-        lbl.textContent = "Reference photos (" + photos.length + ") - tap to enlarge";
-        lbl.style.cssText = "font-weight:700;font-size:13px;margin-bottom:6px;color:#141414";
-        var strip = document.createElement("div");
-        strip.style.cssText = "display:flex;gap:8px;overflow-x:auto;padding-bottom:4px";
-        photos.forEach(function (p) {
-          var im = document.createElement("img");
-          im.src = p.thumb_url || p.url;   // Dropbox-sized tile; the full photo loads on tap
-          im.alt = p.filename || "photo"; im.loading = "lazy";
-          im.style.cssText = "height:96px;width:96px;object-fit:cover;border-radius:10px;border:1px solid #d8d3cc;flex:0 0 auto;cursor:pointer";
-          im.onclick = function () { openPhoto(p.url); };
-          strip.appendChild(im);
+
+    var lbl = document.createElement("div");
+    lbl.style.cssText = "font-weight:700;font-size:13px;margin-bottom:6px;color:#141414";
+    lbl.textContent = "Job photos";
+    var strip = document.createElement("div");
+    strip.style.cssText = "display:flex;gap:8px;overflow-x:auto;padding-bottom:4px";
+
+    var inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/*"; inp.multiple = true;
+    inp.setAttribute("capture", "environment");   // on a phone this opens the camera directly
+    inp.style.display = "none";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "+ Add a photo to this job";
+    btn.style.cssText = "width:100%;margin-top:8px;font-weight:800;font-size:13px;color:#F05014;"
+      + "background:#fff;border:1px dashed #F05014;border-radius:10px;padding:10px 12px;cursor:pointer";
+    btn.onclick = function () { inp.click(); };
+    inp.onchange = function () { upload(Array.prototype.slice.call(inp.files || [])); inp.value = ""; };
+
+    wrap.appendChild(lbl); wrap.appendChild(strip); wrap.appendChild(btn); wrap.appendChild(inp);
+    refresh();
+
+    function refresh() {
+      fetch("/jobs/" + encodeURIComponent(jobId) + "/photos", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (res) {
+          var photos = (res && res.photos) || [];
+          strip.innerHTML = "";
+          lbl.textContent = photos.length
+            ? ("Job photos (" + photos.length + ") - tap to enlarge")
+            : "Job photos - none yet";
+          photos.forEach(function (p) {
+            var im = document.createElement("img");
+            im.src = p.thumb_url || p.url;   // Dropbox-sized tile; the full photo loads on tap
+            im.alt = p.filename || "photo"; im.loading = "lazy";
+            im.style.cssText = "height:96px;width:96px;object-fit:cover;border-radius:10px;border:1px solid #d8d3cc;flex:0 0 auto;cursor:pointer";
+            im.onclick = function () { openPhoto(p.url); };
+            strip.appendChild(im);
+          });
+        }).catch(function () {});
+    }
+
+    function upload(files) {
+      if (!files.length) return;
+      var total = files.length, done = 0, ok = 0;
+      btn.disabled = true;
+      btn.textContent = "Adding " + total + " photo" + (total > 1 ? "s" : "") + "...";
+      files.forEach(function (f) {
+        compressPhotoFile(f).then(function (dataUrl) {
+          return fetch("/jobs/" + encodeURIComponent(jobId) + "/photos", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: f.name || "crew-photo.jpg", data_url: dataUrl }),
+          });
+        }).then(function (r) { if (r && r.ok) ok++; }).catch(function () {}).then(function () {
+          done++;
+          if (done !== total) return;
+          btn.disabled = false;
+          btn.textContent = (ok === total)
+            ? "+ Add a photo to this job"
+            : ("Added " + ok + "/" + total + " - tap to try again");
+          refresh();   // show what actually landed, straight from the folder
         });
-        wrap.appendChild(lbl); wrap.appendChild(strip);
-      }).catch(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); });
+      });
+    }
   }
   // The job's Dropbox photo folder (§10): the manager drops photos into it via the calendar link;
   // give the crew a tap-through to the SAME folder here. Silent when the job has no folder link.
